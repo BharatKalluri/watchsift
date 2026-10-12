@@ -38,7 +38,7 @@ The extension bundles Zod locally for card, settings, rating-response, message, 
 
 ## Formatting
 
-Python uses Ruff with the backend's existing 100-column configuration. TypeScript and CSS in `extension/src/` use Prettier with two-space indentation, single quotes, and a 100-column target. CI checks formatting for both projects.
+Python uses Ruff with the backend's existing 100-column configuration. TypeScript and CSS in `extension/src/` use Prettier with two-space indentation, single quotes, and a 100-column target. Run formatting checks locally; there are no GitHub Actions workflows.
 
 From `backend/`, apply formatting with `rtk proxy uv run ruff format src tests`.
 From `extension/`, use `rtk proxy npm run format`; `rtk proxy npm run format:check` checks without changing files.
@@ -62,7 +62,7 @@ rtk proxy npm exec playwright install chromium
 rtk proxy npm run test:e2e
 ```
 
-Browser tests use **synthetic Netflix and Prime Video DOM** served by Playwright at intercepted provider URLs, with a fresh temporary Chrome profile. They do not log in, navigate the real streaming applications, or play anything. They exercise the packaged extension, filtering, settings, legacy telemetry cleanup, bundled selectors, lazy/reused cards, service failures, and worker restart. CI runs the real API against mocked OMDb responses and never uses a live API key.
+Browser tests use **synthetic Netflix and Prime Video DOM** served by Playwright at intercepted provider URLs, with a fresh temporary Chrome profile. They do not log in, navigate the real streaming applications, or play anything. They exercise the packaged extension, filtering, settings, legacy telemetry cleanup, bundled selectors, lazy/reused cards, service failures, and worker restart.
 
 ### Live validation still required
 
@@ -90,7 +90,7 @@ The extension sends only rating lookups. Usage counts, missing-rating reports, s
 
 1. Check [OMDb data-use terms](https://www.omdbapi.com/) for the planned hosted lookups, ratings/votes display, shared mappings and extension distribution.
 2. Complete the live validation above. Prime Video support covers primevideo.com, including regional paths; Amazon shopping domains and JioHotstar are outside scope.
-3. Create one Railway service with its root set to `backend/`, using the included Dockerfile/config. Configure `DATABASE_URL`, `OMDB_API_KEY` and `ENVIRONMENT=production`; no application data volume is required. Keep one replica/process; use an HTTPS service domain. The health endpoint fails if the OMDb key is missing.
+3. Create one Railway service with its root set to `backend/`, using the included Dockerfile/config. The config sets one Singapore replica with limits of 0.5 vCPU and 512 MiB memory. Configure `DATABASE_URL`, `OMDB_API_KEY` and `ENVIRONMENT=production`; no application data volume is required. Keep one replica/process; use an HTTPS service domain. The health endpoint fails if the OMDb key is missing.
 4. Configure PostgreSQL backups and test a restore on an isolated environment. PostgreSQL stores shared provider mappings and the IMDb cache; no dataset refresh job is needed.
 5. Replace the local prototype privacy document with final publisher/contact information, API address, Railway processing/retention disclosures, and permitted IMDb attribution. Host a public privacy/support page. Supply store icons, actual extension screenshots, narrowly scoped permission explanations, remote-code declarations, and reviewer instructions. There is no public privacy/support URL or publisher contact configured yet.
 6. Build from `extension/` with `WATCHSIFT_API_URL=https://YOUR_API_ORIGIN rtk proxy npm run build`. Then run `rtk proxy npm run package`. This produces `extension/artifacts/watchsift-0.1.0.zip`; it refuses a localhost or non-HTTPS build. Submit that ZIP through Chrome Web Store and retain each released build for rollback.
