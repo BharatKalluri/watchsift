@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "config_version": 3,
+  "config_version": 4,
   "provider": "primevideo",
   "identity": {
     "path_prefixes": [
@@ -12,11 +12,6 @@
     "badge_container": "[data-testid=\"packshot\"]",
     "selector": "[data-testid=\"card\"], [data-testid=\"super-carousel-card\"], [data-testid=\"top-hero-card\"] [data-testid=\"title-metadata-main\"]",
     "title": [
-      {
-        "selector": ":scope",
-        "read": "attribute",
-        "attribute": "data-card-title"
-      },
       {
         "selector": "[data-testid=\"title-art\"]",
         "read": "attribute",
@@ -35,6 +30,11 @@
       {
         "selector": "[data-testid=\"packshot\"] a[href]",
         "read": "text"
+      },
+      {
+        "selector": ":scope",
+        "read": "attribute",
+        "attribute": "data-card-title"
       }
     ],
     "link": [

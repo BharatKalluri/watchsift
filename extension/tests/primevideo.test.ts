@@ -30,6 +30,16 @@ it('reads standard, poster and hero titles without season-art labels or unsuppor
   }
 });
 
+it('prefers the series label over season metadata and retains the metadata fallback', () => {
+  document.body.innerHTML = '<article data-testid="card" data-card-title="Sterling Point - S1" data-card-entity-type="TV Show"><div data-testid="packshot"><button aria-label="Sterling Point"></button><a href="/region/eu/detail/0K94N2UBORZCLPIC46VTJQ093E">Sterling Point</a></div></article>';
+  const element = document.querySelector('article')!;
+  expect(extractCard(element)).toMatchObject({title: 'Sterling Point', explicit_type: 'TV Show'});
+  element.querySelector('button')!.remove();
+  expect(extractCard(element)?.title).toBe('Sterling Point');
+  element.querySelector('a')!.textContent = '';
+  expect(extractCard(element)?.title).toBe('Sterling Point - S1');
+});
+
 it('uses scoped title fallbacks and notices recycled titles, IDs and entity types', () => {
   const element = document.getElementById('prime-good')!;
   element.removeAttribute('data-card-title');

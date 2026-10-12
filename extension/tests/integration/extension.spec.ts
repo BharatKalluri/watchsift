@@ -467,6 +467,8 @@ test('Prime handles bare host, search navigation, lazy cards and recycled identi
     history.pushState({}, '', '/region/eu/search?phrase=Another');
     const card = document.getElementById('prime-good')!;
     card.setAttribute('data-card-title', 'WatchSift unknown recycled prime');
+    card.querySelector('button')!.setAttribute('aria-label', 'WatchSift unknown recycled prime');
+    card.querySelector('a')!.textContent = 'WatchSift unknown recycled prime';
     card.querySelector('a')!.setAttribute('href', '/detail/B000000009');
   });
   await expect(page.locator('#prime-good .watchsift-badge')).toHaveCount(0);
