@@ -22,7 +22,7 @@ IMDb ratings provided through OMDb.
 
 WatchSift is independent and is not affiliated with Netflix, Amazon, or IMDb. A provider account may be required to browse its catalogue.
 
-**Category:** Fun.
+**Category:** Entertainment.
 
 **Single purpose:** Add IMDb ratings and vote counts to Netflix and Prime Video titles, with an optional minimum-rating and vote-count filter.
 
@@ -34,7 +34,7 @@ WatchSift is independent and is not affiliated with Netflix, Amazon, or IMDb. A 
 |---|---|---|---|
 | Store icon | 128×128 PNG | Created; verify final branding before submission | extension/public/icons/128.png |
 | Toolbar icons | 16×16, 32×32, 48×48 PNG | Created; dimensions covered by tests | extension/public/icons/ |
-| Store screenshot | 1280×800 or 640×400 | Required; not prepared | Pending |
+| Store screenshots | 1280×800 JPEG | Prepared from user-provided Netflix and Prime Video screenshots | extension/artifacts/store-screenshots/netflix.jpg; extension/artifacts/store-screenshots/primevideo.jpg |
 | Small promo tile | 440×280 | Required; not prepared | Pending |
 
 Existing fixture screenshots are development evidence, not approved store assets. Capture the actual popup, visible rating badges, and optional filtering for the final release; obtain any needed rights for streaming-site imagery.
@@ -44,7 +44,7 @@ Existing fixture screenshots are development evidence, not approved store assets
 | Entry | Type | Justification |
 |---|---|---|
 | storage | permissions | Save rating/filter preferences and connection status locally; retain retry deadlines across worker restarts. No rating-result cache or browser sync. |
-| Configured WatchSift API origin only | host_permissions | Send visible title information for matching, receive ratings. Development uses http://127.0.0.1:8000/*; replace with the licensed production HTTPS origin before submission. |
+| https://backend-production-8d772.up.railway.app/* | host_permissions | Send visible title information to WatchSift's matching service and receive IMDb ratings and vote counts. |
 | https://www.netflix.com/* and https://netflix.com/* | content_scripts.matches | Read visible Netflix cards and user-opened title details and add rating badges and optional dimming. Runs only in the top frame. |
 | https://www.primevideo.com/* and https://primevideo.com/* | content_scripts.matches | Read visible Prime Video cards and user-opened details and add rating/vote badges and optional dimming. Runs only in the top frame; Amazon shopping domains are excluded. |
 
@@ -56,11 +56,11 @@ No tabs, activeTab, scripting, cookies, history, webRequest, alarms, or all-URLs
 
 | Data type | Handled or collected | Transmitted off-device | Purpose / recipients |
 |---|---|---|---|
-| Personally identifying information | No account/profile identifier; network IP received transiently | IP inherently accompanies requests | Connection and transient API rate limiting; finalize hosting-provider practices before release |
+| Personally identifying information | No account/profile identifier; network IP received transiently | IP inherently accompanies requests | Connection, transient API rate limiting and hosting-provider network processing |
 | Health / financial information | No | No | None |
 | Authentication information | No credentials, cookies, or tokens | No | None |
 | Personal communications | No | No | None |
-| Location | No location collection | No location fields | None |
+| Location | Network IP address; no GPS or device-location access | IP inherently accompanies requests | Transient server rate limiting and hosting network processing; Chrome categorizes IP addresses as Location |
 | Browsing history | No URL/history log or streaming-site viewing history | No history list | Current supported-site titles are website content, disclosed below |
 | Website content | provider names and title IDs, titles, available year/duration/type/row-label text | Yes, to matching API; title/year/type and IMDb IDs are forwarded to OMDb | Return ratings; provider mappings retain submitted title/year/type without user/profile IDs or automatic expiry; shared IMDb data is reused for seven days |
 | User activity | No usage counters | No | None |
@@ -68,13 +68,15 @@ No tabs, activeTab, scripting, cookies, history, webRequest, alarms, or all-URLs
 
 Core lookups are not an optional analytics feature. Do not select “no data collected” in the dashboard. Finalize disclosure categories against the live publisher/service before submission.
 
-The extension sends no telemetry. Upgrading clears obsolete browser-local reporting queues/history and sharing settings while preserving rating/filter preferences and retry deadlines. The PostgreSQL backend stores shared provider mappings and cached IMDb data in the `watchsift` schema. Telemetry submissions, report exports, and remote selector configuration are no longer supported. No persistent extension rating, mapping, metadata or downloaded parser-config cache is maintained.
+The extension sends no telemetry. The PostgreSQL backend stores shared provider mappings and cached IMDb data in the `watchsift` schema. Telemetry submissions, report exports, and remote selector configuration are no longer supported. No persistent extension rating, mapping, metadata or downloaded parser-config cache is maintained.
 
 **Data-use certification to confirm before submission:** no data sale, unrelated use, advertising use, creditworthiness or lending use. The current implementation supports these statements; publisher and hosting practices must match them.
 
 ## Privacy policy
 
-Source: extension/public/privacy.html; packaged as privacy.html. Public policy URL: pending. Publisher, contact channel, hosted API and infrastructure processing details must be completed and the URL verified before submission.
+Public policy URL: https://github.com/BharatKalluri/watchsift/blob/main/PRIVACY.md. Source: PRIVACY.md, mirrored in extension/public/privacy.html and packaged as privacy.html. Updated for the production service, publisher/support, transmitted title content, shared database retention, IP processing and diagnostic logs.
+
+The privacy draft declares Website content and Location (network IP), no remote code, the single purpose, storage/host permission justifications, and the three data-use certifications.
 
 ## Distribution and developer information
 
@@ -92,9 +94,11 @@ The manifest uses MV3, a module service worker, Chrome 116+ and packaged JavaScr
 
 The worker registers listeners synchronously. Persistent preferences/status/backoff live in chrome.storage.local; Promise sequencing is transient coordination only. Network timeouts use abort signals, not scheduled background jobs. No unnecessary side-panel, offscreen, identity, capture, userScripts, context-menu or DevTools features are added.
 
-Public release still requires OMDb data-use terms, production HTTPS API, a complete live privacy policy and support details, approved store screenshots, and the existing human-verified 100-title matching/adapter validation. Heuristic title matching can select the wrong namesake; selector fixes require an extension update.
+The production API is https://backend-production-8d772.up.railway.app, deployed in Bharat Kalluri's Projects on Railway. Health and a live rating lookup passed. The 0.1.0 ZIP was built with this origin in its worker, host permission and CSP; local development still defaults to localhost. Public release still requires OMDb data-use terms, a complete live privacy policy and support details, approved store screenshots, and the existing human-verified 100-title matching/adapter validation. Heuristic title matching can select the wrong namesake; selector fixes require an extension update.
 
 Packaging rejects local/non-HTTPS API origins. Backend startup and packaging require no data-license confirmation flag. Packaging ships only built runtime files and creates a fresh ZIP before replacing an existing artifact. No store upload, publication, developer account registration, or rights approval has been performed.
+
+The Chrome Web Store draft (item ID `ojlaekjpcpiagblpckjpomnjlhfcdodp`) has its description, Entertainment category, English language, existing 128×128 icon, GitHub homepage and GitHub Issues support link filled. The description identifies WatchSift as free and open source and discloses title lookups and shared caching. Two store screenshots are uploaded; the production privacy policy is published in the public repository. No submission has been made.
 
 No rejection history.
 
@@ -106,7 +110,8 @@ No rejection history.
 - [ ] Finalize publisher/contact details and publish privacy/support pages. Replace the prototype policy with the production API, hosting processing/log-retention practices and required attribution. Disclose transmitted website content and persistent shared mappings; no telemetry does not mean no data handling.
 - [ ] Prepare final branding, the 128×128 PNG icon, a required 440×280 promotional image and at least one real 1280×800 or 640×400 screenshot. Capture badges, filtering and popup controls. [Chrome image requirements](https://developer.chrome.com/docs/webstore/images).
 - [ ] Register/configure the developer account if needed, pay the registration fee, complete account security/verification prompts, and choose publisher details and distribution countries. [Account registration](https://developer.chrome.com/docs/webstore/register).
-- [ ] Build using `WATCHSIFT_API_URL=https://YOUR_API_ORIGIN rtk proxy npm run build` from `extension/`. Run extension formatting/unit/browser checks and backend checks from README, then smoke-test this exact build against the hosted API in a clean Chrome profile. Confirm preferences, unknown titles, disabled providers, API failures and worker restart behavior.
+- [x] Build using `rtk proxy env WATCHSIFT_API_URL=https://backend-production-8d772.up.railway.app npm run build` from `extension/`. TypeScript checks and 43 extension unit tests passed.
+- [ ] Smoke-test this exact build against the hosted API in a clean Chrome profile. Confirm preferences, unknown titles, disabled providers, API failures and worker restart behavior; complete browser checks from README.
 - [ ] Package using `rtk proxy npm run package`. Inspect `extension/artifacts/watchsift-0.1.0.zip` and its manifest: production HTTPS permission/CSP, runtime files only, no localhost endpoint or secrets. Retain the released ZIP.
 - [ ] Fill in listing copy, single purpose, storage/site/API permission justifications, website-content disclosures, data-use certifications and the public privacy URL. Declare no remotely hosted code for the current bundled implementation. [Privacy fields](https://developer.chrome.com/docs/webstore/cws-dashboard-privacy).
 - [ ] Provide reproducible reviewer steps for supported streaming sites and any necessary authorized test access. Upload the ZIP, select distribution and submit for review; use deferred publishing if you want to control launch timing. [Submission instructions](https://developer.chrome.com/docs/webstore/publish).
