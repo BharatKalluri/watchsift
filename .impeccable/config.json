@@ -1,0 +1,36 @@
+{
+  "buildPath": "code",
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "broken-image",
+        "value": "*",
+        "files": [
+          "extension/tests/netflix.test.ts"
+        ],
+        "createdAt": "2026-10-11T09:08:23.021Z",
+        "reason": "Agent: intentional DOM extraction fixtures; these images are not shipped UI."
+      },
+      {
+        "rule": "design-system-color",
+        "value": "#eee",
+        "files": [
+          "extension/tests/fixtures/netflix.html"
+        ],
+        "createdAt": "2026-10-11T09:25:28.581Z",
+        "reason": "Agent: synthetic Netflix-shaped host-page fixture, not the extension palette."
+      },
+      {
+        "rule": "design-system-color",
+        "value": "#35483c",
+        "files": [
+          "extension/tests/fixtures/netflix.html"
+        ],
+        "createdAt": "2026-10-11T09:25:28.656Z",
+        "reason": "Agent: synthetic host-card background exercises extension badges and dimming, not shipped extension UI."
+      }
+    ]
+  }
+}

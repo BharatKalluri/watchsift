@@ -1,0 +1,51 @@
+@import 'tailwindcss';
+
+@theme {
+  --spacing: 4px;
+  --radius-md: 6px;
+  --color-paper: #f3efe5;
+  --color-muted: #b8c2b4;
+  --color-soft: #d8dfd1;
+  --color-ink: #1b1e1c;
+  --color-panel: #272d27;
+  --color-line: #3a4039;
+  --color-track: #697367;
+  --color-gold: #f2cc61;
+  --font-sans: 'Segoe UI', sans-serif;
+  --font-serif: Georgia, serif;
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    font-size: 13px;
+  }
+  body {
+    @apply m-0 w-[360px] bg-ink font-sans text-paper [line-height:normal];
+  }
+  p {
+    @apply mt-[6px] text-muted leading-[1.6];
+  }
+  label,
+  h2 {
+    @apply text-[14px] font-semibold;
+  }
+  a {
+    @apply text-gold underline underline-offset-3;
+  }
+  input:disabled {
+    @apply cursor-wait opacity-60;
+  }
+  :is(input, button, a):focus-visible {
+    @apply outline-2 outline-gold outline-offset-4;
+  }
+  ::selection {
+    @apply bg-gold text-ink;
+  }
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-md bg-track;
+  }
+}

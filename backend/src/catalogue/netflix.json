@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "config_version": 2,
+  "provider": "netflix",
+  "identity": {
+    "path_prefixes": [
+      "watch",
+      "title"
+    ],
+    "query_parameter": "jbv"
+  },
+  "cards": {
+    "selector": ".title-card, .search-title-card, div:has(> a[data-uia=\"standard-card\"]), div:has(> a[data-uia=\"ranked-card\"])",
+    "title": [
+      {
+        "selector": ":scope",
+        "read": "attribute",
+        "attribute": "data-title"
+      },
+      {
+        "selector": ".fallback-text",
+        "read": "text"
+      },
+      {
+        "selector": "img[alt]",
+        "read": "attribute",
+        "attribute": "alt"
+      },
+      {
+        "selector": "a",
+        "read": "attribute",
+        "attribute": "aria-label"
+      }
+    ],
+    "link": [
+      {
+        "selector": "a[href*=\"/watch/\"], a[href*=\"/title/\"], a[href*=\"jbv=\"]",
+        "read": "attribute",
+        "attribute": "href"
+      }
+    ],
+    "id": [
+      {
+        "selector": ":scope",
+        "read": "attribute",
+        "attribute": "data-netflix-id"
+      }
+    ],
+    "year": [
+      {
+        "selector": ":scope",
+        "read": "attribute",
+        "attribute": "data-year"
+      },
+      {
+        "selector": ".year",
+        "read": "text"
+      }
+    ],
+    "explicit_type": [
+      {
+        "selector": ":scope",
+        "read": "attribute",
+        "attribute": "data-type"
+      }
+    ],
+    "row_selector": ".carousel-row, .lolomoRow",
+    "row_label": [
+      {
+        "selector": "h1, h2, .row-title",
+        "read": "text"
+      }
+    ]
+  },
+  "detail": {
+    "selector": "[data-uia=\"modal-motion-container-DETAIL_MODAL\"]",
+    "title": [
+      {
+        "selector": "img[alt]:not([alt=\"\"])",
+        "read": "attribute",
+        "attribute": "alt"
+      }
+    ],
+    "year": [
+      {
+        "selector": "[data-uia=\"videoMetadata--container\"] .year",
+        "read": "text"
+      }
+    ],
+    "duration": [
+      {
+        "selector": "[data-uia=\"videoMetadata--container\"] .duration",
+        "read": "text"
+      }
+    ],
+    "badge_container": "[data-uia=\"videoMetadata--container\"]"
+  },
+  "watched_attributes": [
+    "href",
+    "alt",
+    "aria-label",
+    "data-uia",
+    "data-title",
+    "data-netflix-id",
+    "data-year",
+    "data-type"
+  ]
+}

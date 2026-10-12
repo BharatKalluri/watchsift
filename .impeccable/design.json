@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-11T11:34:05.753400+00:00",
+  "title": "Design System: WatchSift",
+  "extensions": {
+    "motion": [
+      {
+        "name": "switch-thumb",
+        "value": "left 120ms ease-out",
+        "purpose": "Enabled only when reduced motion is not requested."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Save minimums",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Full-width threshold save action.",
+      "html": "<button class=\"ds-save\">Save minimums</button>",
+      "css": ".ds-save{width:100%;color:#1b1e1c;background:#f2cc61;padding:10px 12px;border:0;border-radius:6px;font:600 13px \"Segoe UI\",sans-serif;cursor:pointer}.ds-save:hover{background:#ffdf87}.ds-save:active{background:#d6b143}.ds-save:disabled{background:#697367;cursor:wait}.ds-save:focus-visible{outline:2px solid #f2cc61;outline-offset:4px;}"
+    },
+    {
+      "name": "Threshold field",
+      "kind": "input",
+      "refersTo": "threshold-input",
+      "description": "Native number field with tabular values.",
+      "html": "<label class=\"ds-field\">IMDb rating<input type=\"number\" min=\"0\" max=\"10\" step=\"0.1\" value=\"7\" required><span>out of 10</span></label>",
+      "css": ".ds-field{font:600 12px \"Segoe UI\",sans-serif;color:#d8dfd1}.ds-field input{display:block;width:100%;padding:9px 10px;margin-top:8px;color:#f3efe5;background:#272d27;border:1px solid #697367;border-radius:6px;font-size:23px;font-variant-numeric:tabular-nums;caret-color:#f2cc61}.ds-field span{display:block;font-size:10px;font-weight:400;margin-top:6px;color:#b8c2b4}.ds-field input:focus-visible{outline:2px solid #f2cc61;outline-offset:4px;}.ds-field input:disabled{opacity:.6;cursor:wait}"
+    },
+    {
+      "name": "Switch",
+      "kind": "input",
+      "refersTo": "switch",
+      "description": "Independent on/off control.",
+      "html": "<input class=\"ds-switch\" type=\"checkbox\" role=\"switch\" aria-label=\"Show IMDb ratings\" checked>",
+      "css": ".ds-switch{appearance:none;width:34px;height:20px;border-radius:20px;background:#697367;position:relative;margin:0;cursor:pointer}.ds-switch::after{content:\"\";position:absolute;width:14px;height:14px;border-radius:50%;left:3px;top:3px;background:#1b1e1c}.ds-switch:checked{background:#f2cc61}.ds-switch:checked::after{left:17px}.ds-switch:hover{outline:1px solid #d8dfd1;outline-offset:2px}.ds-switch:focus-visible{outline:2px solid #f2cc61;outline-offset:4px;}.ds-switch:disabled{opacity:.6;cursor:wait}@media(prefers-reduced-motion:no-preference){.ds-switch::after{transition:left 120ms ease-out}}"
+    },
+    {
+      "name": "Consent disclosure",
+      "kind": "custom",
+      "description": "Native disclosure for optional sharing details.",
+      "html": "<details class=\"ds-consent\"><summary>Help improve WatchSift</summary><p>Optional. Off until you enable it.</p></details>",
+      "css": ".ds-consent{font:13px \"Segoe UI\",sans-serif;margin-top:18px}.ds-consent summary{cursor:pointer;color:#f3efe5;font-weight:600}.ds-consent summary:focus-visible{outline:2px solid #f2cc61;outline-offset:4px;}.ds-consent p{color:#b8c2b4;font-size:11px;line-height:1.6;margin:6px 0 0}"
+    },
+    {
+      "name": "IMDb badge",
+      "kind": "chip",
+      "refersTo": "rating-badge",
+      "description": "Rating link anchored to the lower-left of a host card.",
+      "html": "<a class=\"ds-badge\" href=\"https://www.imdb.com/title/tt0111161/\">9.3 \u00b7 3.3M votes</a>",
+      "css": ".ds-badge{display:inline-block;padding:4px 7px;border-radius:4px;background:#f2cc61;color:#171611;font:600 11px/1.4 Arial,sans-serif;text-decoration:none;font-variant-numeric:tabular-nums}.ds-badge:hover{background:#ffe095}.ds-badge:focus-visible{outline:2px solid white;outline-offset:3px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Compact cinema control panel",
+    "overview": "The implemented extension uses a charcoal-green surface, warm gold controls and an editorial serif wordmark. Plain labels and measured numerals keep the small popup readable. The same gold identifies IMDb badges on Netflix cards.\n\nThis captures the code-first direction confirmed in `.impeccable/popup.surface.md`. Source: `extension/popup.html`, `extension/src/popup/popup.css` and `extension/src/content/content.css`; visual evidence: `.impeccable/review/popup.png`, `consent.png` and `cards.png`. Card evidence comes from a synthetic fixture, not live Netflix.",
+    "keyCharacteristics": [],
+    "rules": [
+      {
+        "name": "The Shared Accent Rule",
+        "body": "Carry the popup's active-state gold through to on-card rating badges.",
+        "section": "colors"
+      },
+      {
+        "name": "The Visible AND Rule",
+        "body": "Keep the conjunction between both threshold fields and the explanatory sentence below the save action.",
+        "section": "layout"
+      }
+    ],
+    "dos": [
+      "Do keep visible labels, keyboard-focus outlines and reduced-motion behavior.",
+      "Do retain tabular numerals for thresholds and ratings.",
+      "Do keep optional sharing in its disclosure and preserve readable, wrapping details."
+    ],
+    "donts": [
+      "Don't replace the explicit AND relationship with an ambiguous combined field.",
+      "Don't change host-card layout or obstruct its interaction when adding badges.",
+      "Don't treat synthetic card screenshots as evidence of live-site reliability."
+    ]
+  }
+}

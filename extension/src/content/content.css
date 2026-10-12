@@ -1,0 +1,43 @@
+.watchsift-card {
+  position: relative;
+}
+.watchsift-card.watchsift-dimmed {
+  opacity: 0.4;
+}
+.watchsift-card.watchsift-dimmed:hover,
+.watchsift-card.watchsift-dimmed:focus-within {
+  opacity: 1;
+}
+a.watchsift-badge {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  z-index: 5;
+  display: block;
+  padding: 4px 7px;
+  border-radius: 4px;
+  background: #f2cc61;
+  color: #171611;
+  font:
+    600 11px/1.4 Arial,
+    sans-serif;
+  text-decoration: none;
+  font-variant-numeric: tabular-nums;
+}
+a.watchsift-badge:hover {
+  background: #ffe095;
+}
+a.watchsift-badge:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 3px;
+}
+.watchsift-detail-rating > a.watchsift-badge,
+[data-testid='top-hero-card'] [data-testid='title-metadata-main'] > a.watchsift-badge {
+  position: static;
+  width: fit-content;
+  margin-top: 6px;
+}
+
+[data-testid='top-hero-card'] [data-testid='title-metadata-main'] > a.watchsift-badge {
+  pointer-events: auto;
+}

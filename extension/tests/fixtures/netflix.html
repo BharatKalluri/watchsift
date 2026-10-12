@@ -1,0 +1,14 @@
+<!doctype html>
+<!-- Synthetic Netflix-shaped DOM fixture; no authenticated page content. -->
+<html lang="en"><head><meta charset="utf-8"><title>WatchSift card fixture</title>
+<style>body{background:#141414;color:#eee;font:16px Arial;margin:40px}.row{display:flex;gap:20px}.title-card{width:250px;height:145px;background:#35483c;border-radius:6px}.title-card a.native{display:flex;padding:20px;height:100%;color:white;text-decoration:none;align-items:center}.spacer{height:1200px}</style></head>
+<body><h1>Netflix-shaped test cards</h1><div class="row">
+<div id="good" class="title-card" data-year="1994" data-type="movie"><a class="native" href="https://www.netflix.com/watch/1001"><span class="fallback-text">The Shawshank Redemption</span></a></div>
+<div id="low" class="title-card" data-year="1958" data-type="movie"><a class="native" href="https://www.netflix.com/title/1002"><span class="fallback-text">Plan 9 from Outer Space</span></a></div>
+<div id="unknown" class="title-card"><a class="native" href="https://www.netflix.com/browse?jbv=1003"><span class="fallback-text">WatchSift unknown title 9f00d</span></a></div>
+</div><div class="row">
+<!-- Sanitized current Netflix card structure: label on link, empty image alt, no legacy card class. -->
+<div id="modern" data-year="1994" data-type="movie" style="width:250px;height:145px"><a data-uia="standard-card" href="https://www.netflix.com/browse?jbv=1005" aria-label="The Shawshank Redemption"><div><div><img alt="" width="250" height="145" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='250' height='145'/%3E"></div></div></a></div>
+<div id="ranked" data-year="1994" data-type="movie" style="width:250px;height:145px"><a data-uia="ranked-card" href="https://www.netflix.com/browse?jbv=1006" aria-label="The Shawshank Redemption"><div><img alt="" width="250" height="145" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='250' height='145'/%3E"></div></a></div>
+<div id="episode"><a data-uia="episodic-card" href="https://www.netflix.com/browse?jbv=80021956" aria-label="Uno">Uno</a></div>
+</div><div class="spacer"></div><div id="lazy" class="title-card" data-year="1994" data-type="movie"><a class="native" href="https://www.netflix.com/title/1004"><span class="fallback-text">The Shawshank Redemption</span></a></div></body></html>

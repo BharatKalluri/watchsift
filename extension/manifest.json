@@ -1,0 +1,48 @@
+{
+  "manifest_version": 3,
+  "minimum_chrome_version": "116",
+  "name": "WatchSift \u2013 IMDb Ratings & Vote Count Filter",
+  "version": "0.1.0",
+  "description": "IMDb ratings and vote counts on Netflix and Prime Video, with a filter to dim titles below your minimums.",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:8000/*"
+  ],
+  "background": {
+    "service_worker": "worker.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "WatchSift"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.netflix.com/*",
+        "https://netflix.com/*",
+        "https://www.primevideo.com/*",
+        "https://primevideo.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; connect-src http://127.0.0.1:8000"
+  }
+}

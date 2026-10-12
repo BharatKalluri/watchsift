@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "config_version": 3,
+  "provider": "primevideo",
+  "identity": {
+    "path_prefixes": [
+      "detail",
+      "dp"
+    ]
+  },
+  "cards": {
+    "badge_container": "[data-testid=\"packshot\"]",
+    "selector": "[data-testid=\"card\"], [data-testid=\"super-carousel-card\"], [data-testid=\"top-hero-card\"] [data-testid=\"title-metadata-main\"]",
+    "title": [
+      {
+        "selector": ":scope",
+        "read": "attribute",
+        "attribute": "data-card-title"
+      },
+      {
+        "selector": "[data-testid=\"title-art\"]",
+        "read": "attribute",
+        "attribute": "aria-label"
+      },
+      {
+        "selector": "[data-testid=\"image-link\"], [data-testid=\"poster-link\"]",
+        "read": "attribute",
+        "attribute": "aria-label"
+      },
+      {
+        "selector": "[data-testid=\"packshot\"] button",
+        "read": "attribute",
+        "attribute": "aria-label"
+      },
+      {
+        "selector": "[data-testid=\"packshot\"] a[href]",
+        "read": "text"
+      }
+    ],
+    "link": [
+      {
+        "selector": "a[href*=\"/detail/\"], a[href*=\"/dp/\"]",
+        "read": "attribute",
+        "attribute": "href"
+      }
+    ],
+    "id": [],
+    "year": [
+      {
+        "selector": "[data-automation-id=\"release-year-badge\"]:not([data-testid=\"standard-mini-details\"] *)",
+        "read": "text"
+      }
+    ],
+    "explicit_type": [
+      {
+        "selector": ":scope",
+        "read": "attribute",
+        "attribute": "data-card-entity-type"
+      }
+    ],
+    "row_selector": "[data-testid=\"standard-carousel\"], [data-testid=\"super-carousel\"], [data-testid=\"top-hero\"]",
+    "row_label": [
+      {
+        "selector": "[data-testid=\"carousel-title\"]",
+        "read": "text"
+      }
+    ]
+  },
+  "detail": {
+    "selector": "[data-testid=\"detailpage-main\"]",
+    "title": [
+      {
+        "selector": "h1 img[alt]",
+        "read": "attribute",
+        "attribute": "alt"
+      },
+      {
+        "selector": "h1",
+        "read": "text"
+      }
+    ],
+    "year": [
+      {
+        "selector": "[data-testid=\"dp-atf-badges\"] [data-automation-id=\"release-year-badge\"]",
+        "read": "text"
+      }
+    ],
+    "duration": [
+      {
+        "selector": "[data-testid=\"dp-atf-badges\"] [aria-label*=\"season\"]",
+        "read": "text"
+      },
+      {
+        "selector": "[data-testid=\"dp-atf-badges\"] [data-automation-id=\"runtime-badge\"]",
+        "read": "text"
+      }
+    ],
+    "badge_container": "[data-testid=\"dp-atf-badges\"], [data-testid=\"atf-component-next-gen\"] div:has(> [data-automation-id=\"release-year-badge\"])"
+  },
+  "watched_attributes": [
+    "href",
+    "alt",
+    "aria-label",
+    "data-testid",
+    "data-automation-id",
+    "data-card-title",
+    "data-card-entity-type"
+  ]
+}

@@ -1,0 +1,30 @@
+name: Checks
+on: [push, pull_request]
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+      - run: uv sync --frozen
+        working-directory: backend
+      - run: uv run ruff check src tests && uv run ruff format --check src tests && uv run pytest -q
+        working-directory: backend
+      - run: npm ci && npm audit && npm run format:check && npm run build && npm test && npx playwright install --with-deps chromium
+        working-directory: extension
+      - name: Start synthetic API
+        run: |
+          uv run python -m tests.seed_catalogue /tmp/watchsift-test-data
+          WATCHSIFT_DATA_DIR=/tmp/watchsift-test-data uv run uvicorn src.main:app --host 127.0.0.1 --port 8000 --no-access-log &
+          for attempt in $(seq 1 30); do curl -fsS http://127.0.0.1:8000/health && exit 0; sleep 1; done
+          exit 1
+        working-directory: backend
+      - run: npm run test:e2e
+        working-directory: extension
