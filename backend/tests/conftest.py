@@ -16,6 +16,7 @@ def config(tmp_path):
         DATABASE_URL=f"sqlite:///{tmp_path / 'operations.sqlite3'}",
         requests_per_minute=1000,
         OMDB_API_KEY="test-key",
+        REELDB_API_KEY="",
     )
     init_operations(config.database_url.get_secret_value())
     return config

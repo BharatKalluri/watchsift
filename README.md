@@ -2,7 +2,7 @@
 
 IMDb ratings and vote counts on Netflix and Prime Video, with an optional AND filter. Defaults are **7.0 / 1,000 votes**, badges on, filtering off. Unknown or ambiguous titles stay visible.
 
-Ratings and vote counts come from OMDb over HTTPS, using the title and available year/type hints. OMDb chooses a single result for namesakes; titles without enough context can receive the wrong namesake. Missing or unrated titles stay unbadged. Shared provider-to-IMDb mappings are checked against cached title metadata before reuse; IMDb data is reused for seven days.
+Titles are matched through OMDb over HTTPS, using the title and available year/type hints. When a match lacks a rating or vote count, ReelDB is queried by the matched IMDb ID; complete ReelDB ratings are cached with the OMDb title metadata. OMDb chooses a single result for namesakes; titles without enough context can receive the wrong namesake. Missing or unrated titles stay unbadged. Shared provider-to-IMDb mappings are checked against cached title metadata before reuse; IMDb data is reused for seven days.
 
 Local development uses a localhost API. Production packaging requires an HTTPS API origin; backend startup and packaging do not require a data-permission confirmation flag.
 
@@ -17,7 +17,7 @@ rtk proxy uv sync --frozen
 rtk proxy uv run uvicorn src.main:app --host 127.0.0.1 --port 8000 --no-access-log
 ```
 
-Set `DATABASE_URL` and `OMDB_API_KEY` in `backend/.env.local` (or the process environment). The URL points to the shared PostgreSQL database; startup creates the `watchsift` schema and its two tables when absent. No IMDb dataset import is required. `/health` checks that a key is configured; upstream failures are reported by `/v1/resolve`. `/docs` describes the local API. The key stays on the backend.
+Set `DATABASE_URL` and `OMDB_API_KEY` in `backend/.env.local` (or the process environment). The URL points to the shared PostgreSQL database; startup creates the `watchsift` schema and its two tables when absent. Set `REELDB_API_KEY` to enable the optional ratings fallback. Both keys stay on the backend. No IMDb dataset import is required. `/health` checks that a key is configured; upstream failures are reported by `/v1/resolve`. `/docs` describes the local API. The key stays on the backend.
 
 From `extension/`:
 
@@ -90,7 +90,7 @@ The extension sends only rating lookups. Usage counts, missing-rating reports, s
 
 1. Check [OMDb data-use terms](https://www.omdbapi.com/) for the planned hosted lookups, ratings/votes display, shared mappings and extension distribution.
 2. Complete the live validation above. Prime Video support covers primevideo.com, including regional paths; Amazon shopping domains and JioHotstar are outside scope.
-3. Railway infrastructure is defined in `.railway/railway.ts`: the backend uses the included Dockerfile, one Singapore replica, and limits of 0.5 vCPU and 0.5 GB memory. From the repository root, run `rtk npm ci`, then `rtk proxy env _=railway railway config plan` and `rtk proxy env _=railway railway config apply` against the linked project/environment. Setting `_` avoids the SDK mistaking RTK for the Railway CLI during its version check. IaC changes require CLI apply; pushing the file alone does not apply them. GitHub pushes still deploy backend code. Configure `DATABASE_URL`, `OMDB_API_KEY` and `ENVIRONMENT=production` in Railway; IaC leaves variables managed there. No application data volume is required. Keep one replica/process; use an HTTPS service domain. The health endpoint fails if the OMDb key is missing.
+3. Railway infrastructure is defined in `.railway/railway.ts`: the backend uses the included Dockerfile, one Singapore replica, and limits of 0.5 vCPU and 0.5 GB memory. From the repository root, run `rtk npm ci`, then `rtk proxy env _=railway railway config plan` and `rtk proxy env _=railway railway config apply` against the linked project/environment. Setting `_` avoids the SDK mistaking RTK for the Railway CLI during its version check. IaC changes require CLI apply; pushing the file alone does not apply them. GitHub pushes still deploy backend code. Configure `DATABASE_URL`, `OMDB_API_KEY`, `REELDB_API_KEY` and `ENVIRONMENT=production` in Railway; IaC leaves variables managed there. No application data volume is required. Keep one replica/process; use an HTTPS service domain. The health endpoint fails if the OMDb key is missing.
 4. Configure PostgreSQL backups and test a restore on an isolated environment. PostgreSQL stores shared provider mappings and the IMDb cache; no dataset refresh job is needed.
 5. Replace the local prototype privacy document with final publisher/contact information, API address, Railway processing/retention disclosures, and permitted IMDb attribution. Host a public privacy/support page. Supply store icons, actual extension screenshots, narrowly scoped permission explanations, remote-code declarations, and reviewer instructions. There is no public privacy/support URL or publisher contact configured yet.
 6. Build from `extension/` with `WATCHSIFT_API_URL=https://YOUR_API_ORIGIN rtk proxy npm run build`. Then run `rtk proxy npm run package`. This produces `extension/artifacts/watchsift-0.1.0.zip`; it refuses a localhost or non-HTTPS build. Submit that ZIP through Chrome Web Store and retain each released build for rollback.

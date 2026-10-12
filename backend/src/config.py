@@ -18,5 +18,7 @@ class Settings(BaseSettings):
     requests_per_minute: int = 120
     omdb_api_key: SecretStr = Field(default=SecretStr(""), validation_alias="OMDB_API_KEY")
 
+    reeldb_api_key: SecretStr = Field(default=SecretStr(""), validation_alias="REELDB_API_KEY")
+
 
 settings = Settings()

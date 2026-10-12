@@ -101,3 +101,27 @@ class ResolveResponse(BaseModel):
     dataset_version: str
     dataset_date: str
     matcher_version: str
+
+
+class RatingsProviderRequest(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    title: str | None = Field(default=None, min_length=1, max_length=300)
+    imdb_id: str | None = Field(default=None, pattern=r"^tt\d+$")
+    year: int | None = Field(default=None, ge=1870, le=2100)
+    type: Literal["movie", "series"] | None = None
+
+    @model_validator(mode="after")
+    def require_identity(self):
+        if not self.title and not self.imdb_id:
+            raise ValueError("A title or IMDb ID is required")
+        return self
+
+
+class RatingsProviderResult(BaseModel):
+    imdb_id: str = Field(pattern=r"^tt\d+$")
+    title: str = Field(min_length=1)
+    year: int | None = Field(default=None, ge=1870, le=2100)
+    type: Literal["movie", "series"]
+    rating: float | None = Field(default=None, ge=0, le=10)
+    votes: int | None = Field(default=None, ge=0)

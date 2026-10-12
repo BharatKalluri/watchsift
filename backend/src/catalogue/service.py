@@ -1,4 +1,3 @@
-import logging
 import time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
@@ -10,11 +9,11 @@ import httpx
 
 from src.catalogue import constants, schemas, utils
 from src.catalogue.models import IMDbCache, ProviderMapping
+from src.catalogue.ratings_providers import OMDbRatingsProvider, ReelDBRatingsProvider
 from src.config import Settings
 from src.database import operations_session
 
 CACHE_TTL = 7 * 24 * 60 * 60
-logger = logging.getLogger("uvicorn.error")
 # shortcut: locks coordinate one process; use shared coordination before adding replicas.
 MAPPING_LOCKS = [Lock() for _ in range(256)]
 CACHE_LOCKS = [Lock() for _ in range(256)]
@@ -37,60 +36,24 @@ def resolve(
         groups[card.provider, card.provider_id].append((index, card))
     storage = config.database_url.get_secret_value()
 
-    with httpx.Client(base_url="https://www.omdbapi.com/", timeout=2) as client:
+    with httpx.Client(timeout=2) as client:
+        omdb = OMDbRatingsProvider(client, config.omdb_api_key)
+        reeldb = ReelDBRatingsProvider(client, config.reeldb_api_key)
 
         @lru_cache(maxsize=200)
         def fetch(title=None, year=None, kind=None, imdb_id=None):
-            key = config.omdb_api_key.get_secret_value()
-            if not key:
-                raise ValueError("OMDb API key missing")
-            params = {"apikey": key, "i" if imdb_id else "t": imdb_id or title}
-            if year is not None:
-                params["y"] = str(year)
-            if kind is not None:
-                params["type"] = kind
-            logger.info(
-                "OMDb request: title=%r imdb_id=%r year=%r type=%r",
-                title,
-                imdb_id,
-                year,
-                kind,
+            result = omdb.fetch(
+                schemas.RatingsProviderRequest(title=title, year=year, type=kind, imdb_id=imdb_id)
             )
-            response = client.get("", params=params)
-            response.raise_for_status()
-            data = response.json()
-            if not isinstance(data, dict):
-                raise ValueError("Invalid OMDb response")
-            if data.get("Response") == "False":
-                if data.get("Error") in {
-                    "Movie not found!",
-                    "Series not found!",
-                    "Episode not found!",
-                }:
-                    return None
-                raise ValueError("OMDb unavailable")
-            if data.get("Response") != "True" or not all(
-                isinstance(data.get(field), str)
-                for field in ("Title", "Year", "Type", "imdbID", "imdbRating", "imdbVotes")
-            ):
-                raise ValueError("Invalid OMDb fields")
-            if imdb_id and data["imdbID"] != imdb_id:
-                raise ValueError("Unexpected IMDb identity")
-            if data["Type"] not in {"movie", "series"}:
-                return None
-            return IMDbCache.model_validate(
-                {
-                    "imdb_id": data["imdbID"],
-                    "title": data["Title"],
-                    "year": int(data["Year"][:4]) if data["Year"] != "N/A" else None,
-                    "type": data["Type"],
-                    "rating": data["imdbRating"] if data["imdbRating"] != "N/A" else None,
-                    "votes": int(data["imdbVotes"].replace(",", ""))
-                    if data["imdbVotes"] != "N/A"
-                    else None,
-                    "fetched_at": int(time.time()),
-                }
+            return (
+                IMDbCache.model_validate({**result.model_dump(), "fetched_at": int(time.time())})
+                if result
+                else None
             )
+
+        @lru_cache(maxsize=200)
+        def fallback(imdb_id):
+            return reeldb.fetch(schemas.RatingsProviderRequest(imdb_id=imdb_id))
 
         def by_id(imdb_id):
             with CACHE_LOCKS[hash((storage, imdb_id)) % len(CACHE_LOCKS)]:
@@ -152,6 +115,34 @@ def resolve(
                                             lookup_type=card.type,
                                         )
                                     )
+                    if (
+                        row
+                        and (row.rating is None or row.votes is None)
+                        and config.reeldb_api_key.get_secret_value()
+                    ):
+                        # shortcut: unrated results retry per request; add a TTL if quota binds.
+                        with CACHE_LOCKS[hash((storage, row.imdb_id)) % len(CACHE_LOCKS)]:
+                            if use_mappings:
+                                with operations_session(storage) as db:
+                                    cached = db.get(IMDbCache, row.imdb_id)
+                                if (
+                                    cached
+                                    and cached.rating is not None
+                                    and cached.votes is not None
+                                ):
+                                    row.rating, row.votes = cached.rating, cached.votes
+                            if row.rating is None or row.votes is None:
+                                result = fallback(row.imdb_id)
+                                if (
+                                    result
+                                    and result.rating is not None
+                                    and result.votes is not None
+                                ):
+                                    row.rating, row.votes = result.rating, result.votes
+                                    row.fetched_at = int(time.time())
+                                    if use_mappings:
+                                        with operations_session(storage) as db:
+                                            db.merge(row)
                     rating = (
                         schemas.Rating(imdb_id=row.imdb_id, rating=row.rating, votes=row.votes)
                         if row and row.rating is not None and row.votes is not None
