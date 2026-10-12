@@ -1,3 +1,4 @@
+import logging
 import sqlite3
 import time
 
@@ -13,7 +14,8 @@ def card(**kwargs):
     return Card(request_id="0", netflix_id="123", title="Same Name", **kwargs)
 
 
-def test_omdb_lookup_without_dataset_caches_votes_until_expiry(config, omdb, database_path):
+def test_omdb_lookup_without_dataset_caches_votes_until_expiry(config, omdb, database_path, caplog):
+    caplog.set_level(logging.INFO, logger="uvicorn.error")
     first = resolve(config, [card(year=2020, type="movie")])
     assert first.results[0].rating.model_dump() == {
         "imdb_id": "tt1",
@@ -25,10 +27,16 @@ def test_omdb_lookup_without_dataset_caches_votes_until_expiry(config, omdb, dat
     omdb[0]["tt1"].update(imdbRating="7.9", imdbVotes="2,000")
     assert resolve(config, [card()]).results[0].rating.votes == 1000
     assert len(omdb[1]) == 1
+    assert caplog.messages == [
+        "OMDb request: title='Same Name' imdb_id=None year=2020 type='movie'"
+    ]
     with sqlite3.connect(database_path) as db:
         db.execute("UPDATE imdb_cache SET fetched_at=?", (int(time.time()) - CACHE_TTL,))
     assert resolve(config, [card()]).results[0].rating.votes == 2000
     assert omdb[1][-1]["i"] == "tt1"
+    assert caplog.messages[-1] == ("OMDb request: title=None imdb_id='tt1' year=None type=None")
+    assert len(caplog.messages) == 2
+    assert config.omdb_api_key.get_secret_value() not in caplog.text
 
 
 def test_duplicates_and_order_and_mapping_correction(config, omdb, database_path):
@@ -94,13 +102,16 @@ async def test_bad_upstream_responses_are_private_and_retryable(client, monkeypa
     assert "test-key" not in response.text
 
 
-async def test_network_failure_is_retryable(client, monkeypatch):
+async def test_network_failure_is_retryable(client, monkeypatch, caplog):
+    caplog.set_level(logging.INFO, logger="uvicorn.error")
+
     def fail(*args, **kwargs):
         raise httpx.ReadTimeout("upstream timeout")
 
     monkeypatch.setattr(httpx.Client, "get", fail)
     response = await client.post("/v1/resolve", json={"cards": [card().model_dump()]})
     assert response.status_code == 503
+    assert caplog.messages == ["OMDb request: title='Same Name' imdb_id=None year=None type=None"]
 
 
 async def test_missing_key_health_and_lookup(client, config):

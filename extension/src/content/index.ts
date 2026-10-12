@@ -33,7 +33,7 @@ function clear(element: HTMLElement) {
 }
 
 function render(element: HTMLElement, tracked: Tracked) {
-  if (!settings.enabled || !tracked.rating) {
+  if (!settings.enabled || (!tracked.rating && !tracked.pending)) {
     clear(element);
     tracked.rendered = undefined;
     return;
@@ -43,12 +43,13 @@ function render(element: HTMLElement, tracked: Tracked) {
       element.querySelector(parserConfig.cards.badge_container)) ||
     element;
   let badge = element.querySelector<HTMLAnchorElement>('.watchsift-badge');
-  const dimmed = settings.filtering && !passes(tracked.rating, settings);
+  const dimmed = !!tracked.rating && settings.filtering && !passes(tracked.rating, settings);
   // React can replace the host's classes while keeping our badge node.
   if (!element.classList.contains('watchsift-card')) element.classList.add('watchsift-card');
   if (element.classList.contains('watchsift-dimmed') !== dimmed)
     element.classList.toggle('watchsift-dimmed', dimmed);
   const rendered = JSON.stringify([
+    tracked.pending,
     tracked.rating,
     settings.filtering,
     settings.minRating,
@@ -64,6 +65,21 @@ function render(element: HTMLElement, tracked: Tracked) {
     badge.addEventListener('click', (event) => event.stopPropagation());
   }
   if (badge.parentElement !== container) container.append(badge);
+  badge.classList.toggle('watchsift-loading', tracked.pending);
+  if (tracked.pending) {
+    badge.removeAttribute('href');
+    badge.setAttribute('role', 'status');
+    badge.setAttribute('aria-label', 'Loading IMDb rating');
+    badge.title = 'Loading IMDb rating';
+    const spinner = document.createElement('span');
+    spinner.className = 'watchsift-spinner';
+    spinner.setAttribute('aria-hidden', 'true');
+    badge.replaceChildren(spinner);
+    tracked.rendered = rendered;
+    return;
+  }
+  badge.removeAttribute('role');
+  if (!tracked.rating) return;
   const { rating, votes, imdb_id } = tracked.rating;
   const compactVotes = new Intl.NumberFormat('en', {
     notation: 'compact',
@@ -190,8 +206,15 @@ async function flush() {
   if (!batch.length) return;
   flushing = true;
   const payload = batch.map((group, index) => ({ ...group[0][1].card, request_id: String(index) }));
-  for (const group of batch) for (const [, tracked] of group) tracked.pending = true;
   try {
+    await nextFrame();
+    let loadingWrites = 0;
+    for (const group of batch)
+      for (const [element, tracked] of group) {
+        tracked.pending = true;
+        if (cards.get(element) === tracked) render(element, tracked);
+        if (++loadingWrites % 20 === 0) await nextFrame();
+      }
     const reply = (await chrome.runtime.sendMessage({ action: 'resolve', cards: payload })) as {
       results?: Resolution[];
     };
@@ -202,6 +225,7 @@ async function flush() {
     for (let index = 0; index < batch.length; index++) {
       const result = results.get(String(index));
       for (const [element, tracked] of batch[index]) {
+        tracked.pending = false;
         let current = element.classList.contains('watchsift-detail-rating')
           ? detailCard(document, location.href)
           : extractCard(element);
@@ -264,7 +288,8 @@ function observe() {
           mutation.target instanceof Element ? mutation.target : mutation.target.parentElement;
         if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
           const tracked = cards.get(target as HTMLElement);
-          if (tracked?.rating && settings.enabled) render(target as HTMLElement, tracked);
+          if ((tracked?.rating || tracked?.pending) && settings.enabled)
+            render(target as HTMLElement, tracked);
           return false;
         }
         if (target?.closest('.watchsift-badge, .watchsift-detail-rating')) return false;

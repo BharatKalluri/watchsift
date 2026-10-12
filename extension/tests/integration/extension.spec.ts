@@ -9,7 +9,7 @@ let page: Page;
 let popup: Page;
 const apiOrigin = process.env.WATCHSIFT_API_URL || 'http://127.0.0.1:8000';
 
-test.beforeEach(async () => {
+test.beforeEach(async ({}, testInfo) => {
   profile = await mkdtemp(join(tmpdir(), 'watchsift-test-'));
   const extension = resolve('dist');
   context = await chromium.launchPersistentContext(profile, {
@@ -21,6 +21,10 @@ test.beforeEach(async () => {
   const fixture = await readFile('tests/fixtures/netflix.html', 'utf8');
   await context.route('https://www.netflix.com/**', route => route.fulfill({ contentType: 'text/html', body: fixture }));
   await context.route('https://netflix.com/**', route => route.fulfill({ contentType: 'text/html', body: fixture }));
+  if (testInfo.title.startsWith('loading badges')) {
+    await context.route(`${apiOrigin}/health`, route => route.fulfill({ json: { status: 'ok' } }));
+    await context.route(`${apiOrigin}/v1/resolve`, route => route.fulfill({ json: { results: [] } }));
+  }
   page = await context.newPage();
   popup = await context.newPage();
   await popup.goto(`chrome-extension://${id}/popup.html`);
@@ -29,6 +33,47 @@ test.beforeEach(async () => {
 });
 
 test.afterEach(async () => { await context?.close(); await rm(profile, { recursive: true, force: true }); });
+
+for (const outcome of ['matched', 'not_found', 'failure']) {
+  test(`loading badges clear after ${outcome} and respect reduced motion`, async () => {
+    let release!: () => void;
+    const waiting = new Promise<void>(resolve => { release = resolve; });
+    await context.route(`${apiOrigin}/v1/resolve`, async route => {
+      await waiting;
+      if (outcome === 'failure') {
+        await route.fulfill({ status: 503, headers: { 'Retry-After': '30' } });
+        return;
+      }
+      const { cards } = route.request().postDataJSON();
+      await route.fulfill({ json: {
+        results: cards.map((card: { request_id: string }) => ({
+          request_id: card.request_id, status: outcome,
+          rating: outcome === 'matched' ? { imdb_id: 'tt0111161', rating: 9.3, votes: 10000 } : null,
+        })),
+        dataset_version: 'loading-fixture', dataset_date: '2026-10-12', matcher_version: '9',
+      } });
+    });
+    await page.reload();
+    const badge = page.locator('#good .watchsift-badge');
+    await expect(badge).toHaveAttribute('role', 'status');
+    await expect(badge).toHaveAttribute('aria-label', 'Loading IMDb rating');
+    await expect(badge).not.toHaveAttribute('href');
+    await expect(badge).toHaveCSS('background-color', 'rgb(242, 204, 97)');
+    await expect(badge.locator('.watchsift-spinner')).toBeVisible();
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await expect(badge.locator('.watchsift-spinner')).toHaveCSS('animation-duration', '6s');
+    if (outcome === 'matched') await page.screenshot({ path: '../.impeccable/review/loading.png' });
+    release();
+    await expect(page.locator('.watchsift-spinner')).toHaveCount(0);
+    if (outcome === 'matched') {
+      await expect(badge).toHaveText('9.3 · 10K votes');
+      await expect(badge).toHaveAttribute('href', 'https://www.imdb.com/title/tt0111161/');
+      await expect(badge).not.toHaveAttribute('role');
+    } else {
+      await expect(page.locator('.watchsift-badge')).toHaveCount(0);
+    }
+  });
+}
 
 test('packaged extension applies inclusive AND filtering and preserves unknowns', async () => {
   await expect(page.locator('#good .watchsift-badge')).toHaveCount(1);

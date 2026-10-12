@@ -31,6 +31,29 @@ a.watchsift-badge:focus-visible {
   outline: 2px solid white;
   outline-offset: 3px;
 }
+a.watchsift-loading {
+  pointer-events: none;
+}
+.watchsift-spinner {
+  display: block;
+  box-sizing: border-box;
+  width: 15px;
+  height: 15px;
+  border: 2px solid #17161140;
+  border-top-color: #171611;
+  border-radius: 50%;
+  animation: watchsift-spin 0.8s linear infinite;
+}
+@keyframes watchsift-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .watchsift-spinner {
+    animation-duration: 6s;
+  }
+}
 .watchsift-detail-rating > a.watchsift-badge,
 [data-testid='top-hero-card'] [data-testid='title-metadata-main'] > a.watchsift-badge {
   position: static;

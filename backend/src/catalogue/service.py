@@ -1,3 +1,4 @@
+import logging
 import time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
@@ -13,6 +14,7 @@ from src.config import Settings
 from src.database import operations_session
 
 CACHE_TTL = 7 * 24 * 60 * 60
+logger = logging.getLogger("uvicorn.error")
 # shortcut: locks coordinate one process; use shared coordination before adding replicas.
 MAPPING_LOCKS = [Lock() for _ in range(256)]
 CACHE_LOCKS = [Lock() for _ in range(256)]
@@ -47,6 +49,13 @@ def resolve(
                 params["y"] = str(year)
             if kind is not None:
                 params["type"] = kind
+            logger.info(
+                "OMDb request: title=%r imdb_id=%r year=%r type=%r",
+                title,
+                imdb_id,
+                year,
+                kind,
+            )
             response = client.get("", params=params)
             response.raise_for_status()
             data = response.json()
