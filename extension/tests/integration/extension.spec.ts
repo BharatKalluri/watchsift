@@ -412,6 +412,51 @@ test('Prime packaged badges preserve native links, unknowns, filtering and share
   await expect(page.locator('#prime-low')).not.toHaveClass(/watchsift-dimmed/);
 });
 
+test('badges stay readable against host link styles while filtering dims only card content', async () => {
+  await context.route(`${apiOrigin}/v1/resolve`, async route => {
+    const { cards } = route.request().postDataJSON();
+    await route.fulfill({ json: {
+      results: cards.map((card: { request_id: string }) => ({
+        request_id: card.request_id, status: 'matched',
+        rating: { imdb_id: 'tt0052077', rating: 3.9, votes: 12345 },
+      })),
+      dataset_version: 'badge-fixture', dataset_date: '2026-10-12', matcher_version: '9',
+    } });
+  });
+  for (const provider of ['netflix', 'primevideo']) {
+    if (provider === 'primevideo') await openPrime();
+    else await page.reload();
+    const card = page.locator(provider === 'primevideo' ? '#prime-low' : '#low');
+    const badge = card.locator('.watchsift-badge');
+    const native = card.locator('a:not(.watchsift-badge)');
+    await page.addStyleTag({ content: 'body article a, body .title-card a { color: white; }' });
+    await popup.locator('#filtering').check();
+    await page.mouse.move(0, 0);
+    await expect(card).toHaveClass(/watchsift-dimmed/);
+    await expect(card).toHaveCSS('opacity', '1');
+    await expect(native).toHaveCSS('opacity', '0.4');
+    await expect(badge).toHaveCSS('color', 'rgb(23, 22, 17)');
+    await expect(badge).toHaveCSS('font-size', '12px');
+    expect(await badge.evaluate(element => {
+      for (let node: Element | null = element; node; node = node.parentElement)
+        if (Number(getComputedStyle(node).opacity) < 1) return false;
+      return true;
+    })).toBe(true);
+    await page.screenshot({ path: `/tmp/watchsift-badge-${provider}.png` });
+    await badge.hover();
+    await expect(native).toHaveCSS('opacity', '1');
+    await expect(badge).toHaveCSS('color', 'rgb(23, 22, 17)');
+    await page.mouse.move(0, 0);
+    await badge.focus();
+    await expect(native).toHaveCSS('opacity', '1');
+    await expect(badge).toHaveCSS('outline-style', 'solid');
+    expect(await badge.evaluate(element => {
+      const rect = element.getBoundingClientRect();
+      return document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2) === element;
+    })).toBe(true);
+  }
+});
+
 test('Prime handles bare host, search navigation, lazy cards and recycled identity', async () => {
   await openPrime('https://primevideo.com/search?phrase=Film');
   await expect(page.locator('#prime-lazy .watchsift-badge')).toHaveCount(0);

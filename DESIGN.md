@@ -42,8 +42,8 @@ typography:
     fontSize: "23px"
   badge:
     fontFamily: "Arial, sans-serif"
-    fontSize: "11px"
-    fontWeight: 600
+    fontSize: "12px"
+    fontWeight: 700
     lineHeight: 1.4
 rounded:
   badge: "4px"
@@ -131,7 +131,7 @@ Fields and buttons share gently rounded control corners. Badges use the smaller 
 - Number fields: dark green fill, muted-green border, large tabular values and native number validation. Popup keyboard focus uses a gold outline (2px, 4px offset).
 - Switches: muted-green off, gold on, charcoal thumb. Hover adds a light outline. The thumb moves over 120ms with ease-out only when reduced motion is not requested; disabled inputs fade to 0.6 opacity.
 - Consent disclosure: native summary marker and text. Collapsed initially; the two consent switches remain independent, with their own descriptions. Report details use a nested disclosure.
-- Rating badge: compact gold link anchored to the card's lower-left corner, with a brighter hover and white keyboard-focus outline (2px, 3px offset). Below-minimum cards dim to 0.4 opacity and return to full opacity on hover or focus within. Unknown titles remain visible.
+- Rating badge: compact gold link anchored to the card's lower-left corner, with dark ink protected from host link styles, a brighter hover and white keyboard-focus outline (2px, 3px offset). Below-minimum card content dims to 0.4 opacity while the badge remains fully opaque; content returns to full opacity on hover or focus within. Unknown titles remain visible.
 
 **Passive detail rating.** The existing gold IMDb badge appears in normal flow beneath the main metadata of a user-opened Netflix dialog. Background matching leaves scrolling, navigation and focus untouched; there is no loading overlay or automatic dialog navigation.
 

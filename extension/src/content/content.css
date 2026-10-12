@@ -1,12 +1,13 @@
 .watchsift-card {
   position: relative;
 }
-.watchsift-card.watchsift-dimmed {
+/* Fade content beside the badge, never an ancestor that would fade the badge too. */
+.watchsift-card.watchsift-dimmed:not(:hover):not(:focus-within)
+  > :not(.watchsift-badge):not(:has(.watchsift-badge)),
+.watchsift-card.watchsift-dimmed:not(:hover):not(:focus-within)
+  :has(.watchsift-badge)
+  > :not(.watchsift-badge):not(:has(.watchsift-badge)) {
   opacity: 0.4;
-}
-.watchsift-card.watchsift-dimmed:hover,
-.watchsift-card.watchsift-dimmed:focus-within {
-  opacity: 1;
 }
 a.watchsift-badge {
   position: absolute;
@@ -17,9 +18,11 @@ a.watchsift-badge {
   padding: 4px 7px;
   border-radius: 4px;
   background: #f2cc61;
-  color: #171611;
+  /* Host sites style links; keep the gold badge's contrasting ink in every state. */
+  color: #171611 !important;
+  -webkit-text-fill-color: #171611;
   font:
-    600 11px/1.4 Arial,
+    700 12px/1.4 Arial,
     sans-serif;
   text-decoration: none;
   font-variant-numeric: tabular-nums;
