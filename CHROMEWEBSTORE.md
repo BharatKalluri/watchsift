@@ -14,11 +14,11 @@ See IMDb ratings and vote counts alongside Netflix and Prime Video titles while 
 
 Choose a minimum rating and number of rating votes. Optional filtering dims titles that fall below either minimum. Defaults are 7.0 out of 10 and 1,000 rating votes; filtering starts off. Missing or uncertain ratings leave titles visible. Opening a Netflix detail dialog can help resolve titles with similar names.
 
-WatchSift adds ratings as new cards appear. It does not open dialogs, play videos, or interrupt your browsing. Matching can be uncertain and ratings depend on the available IMDb dataset.
+WatchSift adds ratings as new cards appear. It does not open dialogs, play videos, or interrupt your browsing. Matching can be uncertain and ratings are fetched through OMDb.
 
 Settings stay in your browser. Rating lookups send provider names and title IDs, titles, and available title metadata to WatchSift's matching service. No usage counts or missing-rating reports are sent. WatchSift does not read streaming-service credentials, cookies, profiles, or viewing history.
 
-Rating data courtesy of IMDb.
+IMDb ratings provided through OMDb.
 
 WatchSift is independent and is not affiliated with Netflix, Amazon, or IMDb. A provider account may be required to browse its catalogue.
 
@@ -62,13 +62,13 @@ No tabs, activeTab, scripting, cookies, history, webRequest, alarms, or all-URLs
 | Personal communications | No | No | None |
 | Location | No location collection | No location fields | None |
 | Browsing history | No URL/history log or streaming-site viewing history | No history list | Current supported-site titles are website content, disclosed below |
-| Website content | provider names and title IDs, titles, available year/duration/type/row-label text | Yes, to matching API | Return ratings; shared provider-to-IMDb mappings have no user/profile ID and no automatic expiry |
+| Website content | provider names and title IDs, titles, available year/duration/type/row-label text | Yes, to matching API; title/year/type and IMDb IDs are forwarded to OMDb | Return ratings; provider mappings retain submitted title/year/type without user/profile IDs or automatic expiry; shared IMDb data is reused for seven days |
 | User activity | No usage counters | No | None |
 | Preferences and connection state | Browser-local preferences, connection status and retry deadlines | Stay local | Apply controls and respect retry backoff |
 
 Core lookups are not an optional analytics feature. Do not select “no data collected” in the dashboard. Finalize disclosure categories against the live publisher/service before submission.
 
-The extension sends no telemetry. Upgrading clears obsolete browser-local reporting queues/history and sharing settings while preserving rating/filter preferences and retry deadlines. Starting the updated backend removes previously stored telemetry tables while preserving shared provider mappings. Telemetry submissions, report exports, and remote selector configuration are no longer supported. No persistent extension rating, mapping, metadata or downloaded parser-config cache is maintained.
+The extension sends no telemetry. Upgrading clears obsolete browser-local reporting queues/history and sharing settings while preserving rating/filter preferences and retry deadlines. The PostgreSQL backend stores shared provider mappings and cached IMDb data in the `watchsift` schema. Telemetry submissions, report exports, and remote selector configuration are no longer supported. No persistent extension rating, mapping, metadata or downloaded parser-config cache is maintained.
 
 **Data-use certification to confirm before submission:** no data sale, unrelated use, advertising use, creditworthiness or lending use. The current implementation supports these statements; publisher and hosting practices must match them.
 
@@ -92,7 +92,7 @@ The manifest uses MV3, a module service worker, Chrome 116+ and packaged JavaScr
 
 The worker registers listeners synchronously. Persistent preferences/status/backoff live in chrome.storage.local; Promise sequencing is transient coordination only. Network timeouts use abort signals, not scheduled background jobs. No unnecessary side-panel, offscreen, identity, capture, userScripts, context-menu or DevTools features are added.
 
-Public release still requires IMDb data/distribution rights, production HTTPS API, a complete live privacy policy and support details, approved store screenshots, and the existing human-verified 100-title matching/adapter validation. Heuristic title matching can select the wrong namesake; selector fixes require an extension update.
+Public release still requires OMDb data-use terms, production HTTPS API, a complete live privacy policy and support details, approved store screenshots, and the existing human-verified 100-title matching/adapter validation. Heuristic title matching can select the wrong namesake; selector fixes require an extension update.
 
 Packaging rejects local/non-HTTPS API origins. Backend startup and packaging require no data-license confirmation flag. Packaging ships only built runtime files and creates a fresh ZIP before replacing an existing artifact. No store upload, publication, developer account registration, or rights approval has been performed.
 
@@ -100,9 +100,9 @@ No rejection history.
 
 ## Ordered publishing todo
 
-- [ ] Confirm IMDb rights for the public hosted service, ratings/votes display, derived mappings, refreshes and intended distribution. The supplied files are not cleared for this release. [IMDb dataset terms](https://data.imdb.com/non-commercial-datasets/).
+- [ ] Check [OMDb data-use terms](https://www.omdbapi.com/) for the planned public hosted service, ratings/votes display, mappings and distribution.
 - [ ] Complete authenticated Netflix India validation with 100 independently verified titles: no wrong badges and at least 80% correct coverage of recognized rated titles. Verify extraction separately, including search, carousels, hover/details, keyboard navigation and uninterrupted playback. Test Prime Video's real cards, details and regional paths too; current browser tests use synthetic pages.
-- [ ] Deploy the backend with a licensed catalogue, one process/replica, an HTTPS origin and persistent `/data` volume. Verify health, latency, expected-load behavior, outages and rate limiting. Enable backups, test an isolated restore and catalogue rollback, and establish the licensed refresh schedule and hosting budget.
+- [ ] Deploy the backend with an OMDb API key, one process/replica, an HTTPS origin and the PostgreSQL `DATABASE_URL`. Verify health, latency, expected-load behavior, outages and rate limiting. Enable backups, test an isolated mapping restore, and establish the OMDb quota and hosting budget.
 - [ ] Finalize publisher/contact details and publish privacy/support pages. Replace the prototype policy with the production API, hosting processing/log-retention practices and required attribution. Disclose transmitted website content and persistent shared mappings; no telemetry does not mean no data handling.
 - [ ] Prepare final branding, the 128×128 PNG icon, a required 440×280 promotional image and at least one real 1280×800 or 640×400 screenshot. Capture badges, filtering and popup controls. [Chrome image requirements](https://developer.chrome.com/docs/webstore/images).
 - [ ] Register/configure the developer account if needed, pay the registration fee, complete account security/verification prompts, and choose publisher details and distribution countries. [Account registration](https://developer.chrome.com/docs/webstore/register).

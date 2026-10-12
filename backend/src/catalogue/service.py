@@ -1,108 +1,174 @@
-from pathlib import Path
+import time
+from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
+from functools import lru_cache
+from threading import Lock
 
-from sqlalchemy.dialects.sqlite import insert
-from sqlmodel import Session, select
+import httpx
 
 from src.catalogue import constants, schemas, utils
-from src.catalogue.models import Alias, Metadata, ProviderMapping, Title
-from src.database import catalogue_connection, operations_session
+from src.catalogue.models import IMDbCache, ProviderMapping
+from src.config import Settings
+from src.database import operations_session
+
+CACHE_TTL = 7 * 24 * 60 * 60
+# shortcut: locks coordinate one process; use shared coordination before adding replicas.
+MAPPING_LOCKS = [Lock() for _ in range(256)]
+CACHE_LOCKS = [Lock() for _ in range(256)]
 
 
-def matching_rows(
-    db: Session, card: schemas.Card, title: str, imdb_id: str | None = None
-) -> list[Title]:
-    statement = select(Title).join(Alias).where(Alias.normalized == utils.normalize_title(title))
-    if imdb_id is not None:
-        statement = statement.where(Title.imdb_id == imdb_id)
-    if card.year is not None:
-        statement = statement.where(Title.year == card.year)
-    if card.type is not None:
-        # Netflix includes one-off specials in both its film and show rows.
-        statement = statement.where(Title.kind.in_([card.type, "special"]))
-    return list(db.exec(statement.order_by(Title.votes.desc())).all())
+def matches(row: IMDbCache, card: schemas.Card, lookup_title: str | None = None) -> bool:
+    return (
+        utils.title_identity(card.title)
+        in {utils.title_identity(row.title), utils.title_identity(lookup_title or row.title)}
+        and (card.year is None or card.year == row.year)
+        and (card.type is None or card.type == row.type)
+    )
 
 
 def resolve(
-    data_dir: Path, cards: list[schemas.Card], *, use_mappings: bool = True
+    config: Settings, cards: list[schemas.Card], *, use_mappings: bool = True
 ) -> schemas.ResolveResponse:
-    with catalogue_connection(data_dir) as db, operations_session(data_dir) as mappings:
-        metadata = dict(db.exec(select(Metadata.key, Metadata.value)).all())
-        results = []
-        for card in cards:
-            cached = (
-                mappings.exec(
-                    select(ProviderMapping.imdb_id).where(
-                        ProviderMapping.provider == card.provider,
-                        ProviderMapping.provider_id == card.provider_id,
-                    )
-                ).first()
-                if use_mappings
-                else None
-            )
-            cached_rows = []
-            if cached:
-                for title in [card.title, *utils.title_variants(card.title)]:
-                    cached_rows = matching_rows(db, card, title, cached)
-                    if cached_rows:
-                        break
-            rows = cached_rows or matching_rows(db, card, card.title)
-            fallback = False
-            if not rows:
-                # Only exact, unique fallback names; never fuzzy-match a sequel or remake.
-                candidates = {}
-                for variant in utils.title_variants(card.title):
-                    for row in matching_rows(db, card, variant):
-                        candidates[row.imdb_id] = row
-                rows = list(candidates.values())
-                fallback = True
-            else:
-                primary = [
-                    row
-                    for row in rows
-                    if utils.title_identity(row.primary_title) == utils.title_identity(card.title)
-                ]
-                # Keep alias competitors when a primary namesake may be an unrated new remake.
-                if primary and (
-                    len(primary) == 1 or all(row.rating is not None for row in primary)
-                ):
-                    rows = primary
-            status = "not_found"
-            if len(rows) > 1:
-                status = "ambiguous"
-                # Popularity is a heuristic; close namesakes remain unresolved.
-                if not fallback and (rows[0].votes or 0) >= max(
-                    1000, 100 * max(rows[1].votes or 0, 1)
-                ):
-                    status = "matched"
-            elif rows and rows[0].rating is not None:
-                status = "matched"
-            rating = (
-                schemas.Rating(imdb_id=rows[0].imdb_id, rating=rows[0].rating, votes=rows[0].votes)
-                if status == "matched"
-                else None
-            )
-            # Share unique year matches and dominant matches qualified by both year and type.
-            if (
-                use_mappings
-                and rating
-                and card.year is not None
-                and (len(rows) == 1 or card.type is not None)
+    groups = defaultdict(list)
+    for index, card in enumerate(cards):
+        groups[card.provider, card.provider_id].append((index, card))
+    storage = config.database_url.get_secret_value()
+
+    with httpx.Client(base_url="https://www.omdbapi.com/", timeout=2) as client:
+
+        @lru_cache(maxsize=200)
+        def fetch(title=None, year=None, kind=None, imdb_id=None):
+            key = config.omdb_api_key.get_secret_value()
+            if not key:
+                raise ValueError("OMDb API key missing")
+            params = {"apikey": key, "i" if imdb_id else "t": imdb_id or title}
+            if year is not None:
+                params["y"] = str(year)
+            if kind is not None:
+                params["type"] = kind
+            response = client.get("", params=params)
+            response.raise_for_status()
+            data = response.json()
+            if not isinstance(data, dict):
+                raise ValueError("Invalid OMDb response")
+            if data.get("Response") == "False":
+                if data.get("Error") in {
+                    "Movie not found!",
+                    "Series not found!",
+                    "Episode not found!",
+                }:
+                    return None
+                raise ValueError("OMDb unavailable")
+            if data.get("Response") != "True" or not all(
+                isinstance(data.get(field), str)
+                for field in ("Title", "Year", "Type", "imdbID", "imdbRating", "imdbVotes")
             ):
-                statement = insert(ProviderMapping).values(
-                    provider=card.provider, provider_id=card.provider_id, imdb_id=rating.imdb_id
-                )
-                mappings.execute(
-                    statement.on_conflict_do_update(
-                        index_elements=["provider", "provider_id"],
-                        set_={"imdb_id": statement.excluded.imdb_id},
-                    )
-                )
-            results.append(
-                schemas.Resolution(request_id=card.request_id, status=status, rating=rating)
+                raise ValueError("Invalid OMDb fields")
+            if imdb_id and data["imdbID"] != imdb_id:
+                raise ValueError("Unexpected IMDb identity")
+            if data["Type"] not in {"movie", "series"}:
+                return None
+            return IMDbCache.model_validate(
+                {
+                    "imdb_id": data["imdbID"],
+                    "title": data["Title"],
+                    "year": int(data["Year"][:4]) if data["Year"] != "N/A" else None,
+                    "type": data["Type"],
+                    "rating": data["imdbRating"] if data["imdbRating"] != "N/A" else None,
+                    "votes": int(data["imdbVotes"].replace(",", ""))
+                    if data["imdbVotes"] != "N/A"
+                    else None,
+                    "fetched_at": int(time.time()),
+                }
             )
+
+        def by_id(imdb_id):
+            with CACHE_LOCKS[hash((storage, imdb_id)) % len(CACHE_LOCKS)]:
+                with operations_session(storage) as db:
+                    row = db.get(IMDbCache, imdb_id)
+                if row and time.time() - row.fetched_at < CACHE_TTL:
+                    return row
+                row = fetch(imdb_id=imdb_id)
+                if row:
+                    with operations_session(storage) as db:
+                        db.merge(row)
+                return row
+
+        def resolve_group(group):
+            identity, entries = group
+            results = []
+            with MAPPING_LOCKS[hash((storage, identity)) % len(MAPPING_LOCKS)]:
+                for index, card in entries:
+                    row = None
+                    mapping = None
+                    if use_mappings:
+                        with operations_session(storage) as db:
+                            mapping = db.get(ProviderMapping, identity)
+                            cached = db.get(IMDbCache, mapping.imdb_id) if mapping else None
+                        if mapping and (
+                            cached is None or matches(cached, card, mapping.lookup_title)
+                        ):
+                            row = by_id(mapping.imdb_id)
+                            if row and not matches(row, card, mapping.lookup_title):
+                                row = None
+                    if row is None:
+                        # shortcut: OMDb selects namesakes; use search if ambiguity needs review.
+                        row = fetch(card.title, card.year, card.type)
+                        if row and (
+                            (card.year is not None and card.year != row.year)
+                            or (card.type is not None and card.type != row.type)
+                        ):
+                            row = None
+                        if row and use_mappings:
+                            with CACHE_LOCKS[hash((storage, row.imdb_id)) % len(CACHE_LOCKS)]:
+                                with operations_session(storage) as db:
+                                    cached = db.get(IMDbCache, row.imdb_id)
+                                    if (
+                                        cached
+                                        and time.time() - cached.fetched_at < CACHE_TTL
+                                        and cached.year == row.year
+                                        and cached.type == row.type
+                                    ):
+                                        row = cached
+                                    else:
+                                        db.merge(row)
+                                    db.merge(
+                                        ProviderMapping(
+                                            provider=card.provider,
+                                            provider_id=card.provider_id,
+                                            imdb_id=row.imdb_id,
+                                            lookup_title=card.title,
+                                            lookup_year=card.year,
+                                            lookup_type=card.type,
+                                        )
+                                    )
+                    rating = (
+                        schemas.Rating(imdb_id=row.imdb_id, rating=row.rating, votes=row.votes)
+                        if row and row.rating is not None and row.votes is not None
+                        else None
+                    )
+                    results.append(
+                        (
+                            index,
+                            schemas.Resolution(
+                                request_id=card.request_id,
+                                status="matched" if rating else "not_found",
+                                rating=rating,
+                            ),
+                        )
+                    )
+            return results
+
+        # Cards sharing a provider ID keep their original order.
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            results = [
+                entry for group in pool.map(resolve_group, groups.items()) for entry in group
+            ]
+
     return schemas.ResolveResponse(
-        results=results,
-        dataset_version=metadata["version"],
-        dataset_date=metadata["date"],
+        results=[result for _, result in sorted(results, key=lambda entry: entry[0])],
+        dataset_version="omdb",
+        dataset_date=datetime.now(UTC).date().isoformat(),
         matcher_version=constants.MATCHER_VERSION,
     )

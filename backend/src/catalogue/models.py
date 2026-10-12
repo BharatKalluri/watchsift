@@ -1,43 +1,39 @@
-"""Immutable catalogue tables and shared provider identities."""
+"""Shared provider identities and cached IMDb data."""
 
-from sqlalchemy import CheckConstraint, Text
+from typing import Annotated, Literal
+
+from pydantic import StringConstraints
+from sqlalchemy import BigInteger, CheckConstraint, Text
 from sqlmodel import Field, SQLModel
-
-
-class Title(SQLModel, table=True):
-    __tablename__ = "title"
-    __table_args__ = (
-        CheckConstraint("rating BETWEEN 0 AND 10"),
-        CheckConstraint("votes >= 0"),
-        {"sqlite_with_rowid": False},
-    )
-
-    imdb_id: str = Field(primary_key=True, sa_type=Text)
-    primary_title: str = Field(sa_type=Text)
-    year: int | None = None
-    kind: str = Field(sa_type=Text)
-    rating: float | None = None
-    votes: int | None = None
-
-
-class Alias(SQLModel, table=True):
-    __tablename__ = "alias"
-    __table_args__ = {"sqlite_with_rowid": False}
-
-    normalized: str = Field(primary_key=True, sa_type=Text)
-    imdb_id: str = Field(primary_key=True, foreign_key="title.imdb_id", sa_type=Text)
-
-
-class Metadata(SQLModel, table=True):
-    __tablename__ = "metadata"
-
-    key: str = Field(primary_key=True, sa_type=Text)
-    value: str = Field(sa_type=Text)
 
 
 class ProviderMapping(SQLModel, table=True):
     __tablename__ = "provider_mapping"
+    __table_args__ = {"schema": "watchsift"}
 
     provider: str = Field(primary_key=True, sa_type=Text)
     provider_id: str = Field(primary_key=True, sa_type=Text)
     imdb_id: str = Field(sa_type=Text)
+    lookup_title: str | None = Field(default=None, sa_type=Text)
+    lookup_year: int | None = None
+    lookup_type: str | None = Field(default=None, sa_type=Text)
+
+
+class IMDbCache(SQLModel, table=True):
+    __tablename__ = "imdb_cache"
+    __table_args__ = (
+        CheckConstraint("rating BETWEEN 0 AND 10"),
+        CheckConstraint("votes >= 0"),
+        CheckConstraint("type IN ('movie', 'series')"),
+        {"schema": "watchsift"},
+    )
+
+    imdb_id: Annotated[str, StringConstraints(pattern=r"^tt\d+$")] = Field(
+        primary_key=True, sa_type=Text
+    )
+    title: str = Field(sa_type=Text, min_length=1)
+    year: int | None = None
+    type: Literal["movie", "series"] = Field(sa_type=Text)
+    rating: float | None = Field(default=None, ge=0, le=10)
+    votes: int | None = Field(default=None, ge=0, sa_type=BigInteger)
+    fetched_at: int = Field(ge=0, sa_type=BigInteger)

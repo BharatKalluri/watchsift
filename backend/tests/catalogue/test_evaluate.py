@@ -10,8 +10,8 @@ def test_reports_wrong_badges_without_claiming_a_small_set_is_verified(config, t
         "125,Same Name,,,tt2\n",
         encoding="utf-8",
     )
-    report = evaluate(path, config.data_dir)
-    assert report["badges"] == 2
-    assert report["precision"] == 0.5
+    report = evaluate(path, config)
+    assert report["badges"] == 3
+    assert report["precision"] == 1 / 3
     assert report["errors"][0]["actual"] == "tt5"
     assert report["accepted"] is False

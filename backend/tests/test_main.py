@@ -23,7 +23,7 @@ async def test_rate_limit(config):
         assert int(response.headers["retry-after"]) > 0
 
 
-async def test_production_starts_and_serves_catalogue(config):
+async def test_production_starts_without_dataset(config):
     config.environment = "production"
     app = create_app(config)
     async with app.router.lifespan_context(app):

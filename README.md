@@ -2,7 +2,7 @@
 
 IMDb ratings and vote counts on Netflix and Prime Video, with an optional AND filter. Defaults are **7.0 / 1,000 votes**, badges on, filtering off. Unknown or ambiguous titles stay visible.
 
-Matching uses exact IMDb aliases and available year/type, including explicit film/series hints and row labels shared across duplicate cards. Exact primary titles retain meaningful punctuation and take precedence over conflicting aliases when that does not narrow away an unrated primary namesake. If the exact lookup has no candidates, limited Unicode cleanup, Latin accent folding, descriptive subtitle removal, and a trailing part-I variant are tried; these fallbacks require one unique rated candidate. IMDb TV specials have their own catalogue kind and can match in film or show rows. Other name collisions still require at least 1,000 votes and 100 times the next candidate's votes. These title and popularity heuristics can select a wrong namesake; closer ties remain unbadged.
+Ratings and vote counts come from OMDb over HTTPS, using the title and available year/type hints. OMDb chooses a single result for namesakes; titles without enough context can receive the wrong namesake. Missing or unrated titles stay unbadged. Shared provider-to-IMDb mappings are checked against cached title metadata before reuse; IMDb data is reused for seven days.
 
 Local development uses a localhost API. Production packaging requires an HTTPS API origin; backend startup and packaging do not require a data-permission confirmation flag.
 
@@ -14,11 +14,10 @@ From `backend/`:
 
 ```sh
 rtk proxy uv sync --frozen
-rtk proxy uv run python -m src.catalogue.importer ../datasets/imdb-datasets-2026-10-11 --date 2026-10-11
 rtk proxy uv run uvicorn src.main:app --host 127.0.0.1 --port 8000 --no-access-log
 ```
 
-The full supplied dataset has already been imported locally into `backend/data/`. Skip the import unless rebuilding the catalogue. The API's `/health` reports availability; `/docs` describes the local API.
+Set `DATABASE_URL` and `OMDB_API_KEY` in `backend/.env.local` (or the process environment). The URL points to the shared PostgreSQL database; startup creates the `watchsift` schema and its two tables when absent. No IMDb dataset import is required. `/health` checks that a key is configured; upstream failures are reported by `/v1/resolve`. `/docs` describes the local API. The key stays on the backend.
 
 From `extension/`:
 
@@ -31,7 +30,7 @@ Open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and
 
 ## Structure
 
-The backend follows [zhanymkanov's domain-based FastAPI structure](https://github.com/zhanymkanov/fastapi-best-practices): `backend/src/catalogue/` contains its router, request/response schemas, and services; shared config, dependencies, connections, and application setup live at `backend/src/`. SQLite tables are defined with SQLModel in `catalogue/models.py`. Synchronous sessions run inside FastAPI's thread pool; catalogue sessions are read-only and operations sessions commit or roll back as one transaction. The importer uses batched table inserts rather than per-title ORM objects. Existing catalogue snapshots need no reimport. Backend startup transactionally removes obsolete usage metrics, receipts, and missing-rating report tables, preserving shared provider mappings. Restart the backend to apply this cleanup.
+The backend follows [zhanymkanov's domain-based FastAPI structure](https://github.com/zhanymkanov/fastapi-best-practices): `backend/src/catalogue/` contains its router, request/response schemas, and services; shared config, dependencies, connections, and application setup live at `backend/src/`. Shared provider mappings and cached IMDb data use SQLModel/PostgreSQL in `catalogue/models.py`, explicitly scoped to the `watchsift` schema. Synchronous database and OMDb calls run outside the event loop, with up to eight parallel lookup groups per batch. `provider_mapping` stores provider identities and lookup context; `imdb_cache` stores title metadata, ratings, vote counts, and a UTC fetch timestamp keyed by IMDb ID. Fresh cache rows are shared for seven days across providers and users. Concurrent requests for the same provider ID or mapped IMDb ID share a fetch within the single server process. Startup preserves existing tables and data. The backend no longer includes dataset import or snapshot rollback tools. The API uses `DATABASE_URL` and no longer reads `backend/data`. Old SQLite files and catalogue snapshots are unused; retain them only as migration backups. Isolated tests use temporary SQLite databases with schema translation and mock OMDb responses.
 
 The extension groups code by context: `src/background/` owns API transport and message handling; `src/content/` reads Netflix and Prime Video DOM and renders badges; `src/popup/` owns popup controls; `src/shared/` contains validated settings, response types and selector configuration. `manifest.json` is the editable manifest source; the build scopes its API host and CSP to the configured backend. Packaged entry-point paths stay stable. Chrome 116+ is required. The extension uses a DOM adapter, a content script, an event-driven service worker, and a React popup styled with Tailwind. Preferences and connection status survive worker restarts; ratings and title metadata are not cached. Retry deadlines survive service-worker restarts; only short-lived operation sequencing live in worker memory. Content DOM updates yield across animation frames in groups of 20. Only extension contexts can read the local storage; streaming-site content scripts obtain preferences and ratings through validated messages.
 
@@ -63,7 +62,7 @@ rtk proxy npm exec playwright install chromium
 rtk proxy npm run test:e2e
 ```
 
-Browser tests use **synthetic Netflix and Prime Video DOM** served by Playwright at intercepted provider URLs, with a fresh temporary Chrome profile. They do not log in, navigate the real streaming applications, or play anything. They exercise the packaged extension, filtering, settings, legacy telemetry cleanup, bundled selectors, lazy/reused cards, service failures, and worker restart. CI uses a tiny synthetic catalogue; the local prototype uses the full supplied index.
+Browser tests use **synthetic Netflix and Prime Video DOM** served by Playwright at intercepted provider URLs, with a fresh temporary Chrome profile. They do not log in, navigate the real streaming applications, or play anything. They exercise the packaged extension, filtering, settings, legacy telemetry cleanup, bundled selectors, lazy/reused cards, service failures, and worker restart. CI runs the real API against mocked OMDb responses and never uses a live API key.
 
 ### Live validation still required
 
@@ -75,42 +74,36 @@ netflix_id,title,year,type,expected_imdb_id
 
 Use `movie` or `series` when visible metadata provides it; leave absent fields empty. A blank expected IMDb ID means no trusted rating should be displayed. Run `rtk proxy uv run python -m src.catalogue.evaluate /absolute/path/verified.csv` from `backend/`. The command fails unless there are at least 100 titles, no wrong badges, and at least 80% correct badge coverage of recognized rated titles. Record DOM extraction success separately and manually check hover previews, keyboard navigation, search, carousels, and playback. A matcher-only evaluation cannot establish live adapter reliability.
 
-## Catalogue maintenance
+## OMDb lookups
 
-Imports stream all three gzipped TSVs. The index contains movies, TV movies, series, miniseries, and TV specials with all available aliases. Unrated titles remain in the matching candidate set; only rated matches return badges. Low-vote titles remain available. Matching follows the primary-title, context, limited fallback, and popularity rules above. No fuzzy or transliteration guesses.
+The extension sends visible card batches to the backend and keeps no persistent rating or metadata cache. The backend saves successful provider-to-IMDb mappings, including their submitted title/year/type context. Ratings and title metadata are reused from `imdb_cache` for seven days after a successful fetch; reads do not extend that window. Expired mapped titles refresh by IMDb ID on demand. Valid unrated titles are cached too; unknown titles and upstream errors are not. Conflicting title/year/type hints trigger a new title lookup. Key, quota, network, or malformed-response failures return a retryable 503 while preserving old cache rows and mappings. There is no scheduled refresh or stale-result fallback.
 
-Import creates a validated immutable snapshot, atomically switches `current.sqlite3`, and keeps `previous.sqlite3` for rollback. Existing requests finish on their opened snapshot. From `backend/`:
-
-```sh
-rtk proxy uv run python -m src.catalogue.manage rollback
-```
-
-Every page load and newly visible card batch makes fresh rating lookups. The extension keeps no persistent rating or metadata cache; legacy browser caches are removed. The backend shares year-qualified provider-to-IMDb mappings across requests. API errors back off; missing ratings are left visible.
+For extension compatibility, responses retain `dataset_version` (`omdb`), `dataset_date` (the UTC lookup date, not an upstream snapshot date), and `matcher_version`.
 
 ## Telemetry
 
-The extension sends only rating lookups. Usage counts, missing-rating reports, sharing controls, and local report history have been removed. On worker startup, legacy reporting queues/history and sharing settings are cleared while rating/filter preferences and retry deadlines are preserved. The backend removes telemetry endpoints, report exports, and retention jobs. Restarting the updated backend removes previously stored telemetry tables while preserving shared provider mappings. Older extensions can still resolve ratings using their bundled selectors, but reporting and remote selector configuration are no longer available.
+The extension sends only rating lookups. Usage counts, missing-rating reports, sharing controls, and local report history have been removed. On worker startup, legacy reporting queues/history and sharing settings are cleared while rating/filter preferences and retry deadlines are preserved. The backend removes telemetry endpoints, report exports, and retention jobs. The PostgreSQL backend stores only shared provider mappings and cached IMDb data. Older extensions can still resolve ratings using their bundled selectors, but reporting and remote selector configuration are no longer available.
 
 ## Prepare the public release
 
 [CHROMEWEBSTORE.md](CHROMEWEBSTORE.md) tracks listing copy, permission justifications, privacy disclosures, assets and outstanding release requirements.
 
-1. Obtain rights covering hosted lookups, derived mappings/aliases, redistribution of ratings/votes, refreshes, and intended extension use. [IMDb's public export terms](https://data.imdb.com/non-commercial-datasets/) are personal/non-commercial; possession of the files is not production permission.
+1. Check [OMDb data-use terms](https://www.omdbapi.com/) for the planned hosted lookups, ratings/votes display, shared mappings and extension distribution.
 2. Complete the live validation above. Prime Video support covers primevideo.com, including regional paths; Amazon shopping domains and JioHotstar are outside scope.
-3. Create one Railway service with its root set to `backend/`, using the included Dockerfile/config. Mount a persistent volume at `/data`. Load the catalogue snapshots into that volume. Configure `WATCHSIFT_ENVIRONMENT=production`. Keep one replica/process; use an HTTPS service domain. The health endpoint fails until a catalogue is loaded.
-4. Enable Railway volume backups and test a restore on an isolated environment. Keep previous catalogue snapshots. After permission, refresh weekly with the importer; do not build unlicensed dataset downloads into deployment images.
+3. Create one Railway service with its root set to `backend/`, using the included Dockerfile/config. Configure `DATABASE_URL`, `OMDB_API_KEY` and `ENVIRONMENT=production`; no application data volume is required. Keep one replica/process; use an HTTPS service domain. The health endpoint fails if the OMDb key is missing.
+4. Configure PostgreSQL backups and test a restore on an isolated environment. PostgreSQL stores shared provider mappings and the IMDb cache; no dataset refresh job is needed.
 5. Replace the local prototype privacy document with final publisher/contact information, API address, Railway processing/retention disclosures, and permitted IMDb attribution. Host a public privacy/support page. Supply store icons, actual extension screenshots, narrowly scoped permission explanations, remote-code declarations, and reviewer instructions. There is no public privacy/support URL or publisher contact configured yet.
 6. Build from `extension/` with `WATCHSIFT_API_URL=https://YOUR_API_ORIGIN rtk proxy npm run build`. Then run `rtk proxy npm run package`. This produces `extension/artifacts/watchsift-0.1.0.zip`; it refuses a localhost or non-HTTPS build. Submit that ZIP through Chrome Web Store and retain each released build for rollback.
 
-Production costs, hosted p95, volume restore, publisher details, and authenticated Netflix compatibility have not been verified. The API is intentionally one process: move rate limiting to shared storage before adding replicas. Hosting credentials are never embedded in the extension.
+Production costs, hosted p95, database restore, publisher details, and authenticated Netflix compatibility have not been verified. The API is intentionally one process: move rate limiting to shared storage before adding replicas. Hosting credentials are never embedded in the extension.
 
 ### Passive detail enrichment and shared mappings
 
-Visible grid cards resolve in the background without a loader, navigation, focus changes, or interruption. WatchSift never opens or closes Netflix dialogs or navigates Prime Video automatically. When the user opens a Netflix detail dialog or Prime Video detail page, it reads the main title’s year and duration/type and retries matching. A rating appears in the detail metadata and on matching grid cards. Unknown or ambiguous titles remain unbadged.
+Visible grid cards resolve in the background without a loader, navigation, focus changes, or interruption. WatchSift never opens or closes Netflix dialogs or navigates Prime Video automatically. When the user opens a Netflix detail dialog or Prime Video detail page, it reads the main title’s year and duration/type and retries matching. A rating appears in the detail metadata and on matching grid cards. Missing or unrated titles remain unbadged.
 
-The backend stores `provider_mapping(provider, provider_id, imdb_id)` in `operations.sqlite3`, keyed by `(provider, provider_id)`. Only year-qualified unique matches or clearly dominant matches qualified by both year and type are saved; title-only popularity guesses and negative results are not. Subsequent users can resolve the same provider ID without opening its detail dialog. Every hit checks the supplied title and available year/type against the current catalogue and reads current ratings/votes; conflicting metadata falls back to matching and can correct the mapping. Mappings survive backend restarts and catalogue replacement. They contain no user or profile identifiers and have no automatic expiry.
+The backend stores `provider_mapping(provider, provider_id, imdb_id, lookup_title, lookup_year, lookup_type)` in the PostgreSQL `watchsift` schema, keyed by `(provider, provider_id)`. `imdb_cache` is keyed by IMDb ID and holds canonical title/year/type, nullable rating/votes, and `fetched_at`. Successful matches, including title-only and unrated results, establish mappings. Missing titles do not. Conflicting metadata triggers a title lookup and can correct the mapping. Mappings survive restarts, contain no user or profile identifiers, and have no automatic expiry. Existing rows are preserved on startup; cached data fills on demand.
 
-`/v1/resolve` accepts generic `provider` and `provider_id` fields, with `provider` defaulting to `netflix`. Existing `netflix_id` requests remain compatible; conflicting identities are rejected. Offline evaluation bypasses the shared mappings so previous lookups cannot inflate matching accuracy.
+`/v1/resolve` accepts generic `provider` and `provider_id` fields, with `provider` defaulting to `netflix`. Existing `netflix_id` requests remain compatible; conflicting identities are rejected. OMDb evaluation bypasses the shared mappings so previous lookups cannot inflate matching accuracy.
 
 The browser retains only the current page’s display state, preferences, and connection status/retry deadlines. There are no additional permissions, private streaming-site API calls, background tabs, backend streaming-site scraping, or TMDB integration. Synthetic packaged tests cover passive dialog enrichment and uninterrupted scrolling; authenticated extension execution still needs live verification.
 

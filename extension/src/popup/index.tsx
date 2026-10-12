@@ -199,8 +199,8 @@ function Popup() {
         <a href="privacy.html" target="_blank" rel="noopener">
           Privacy &amp; data
         </a>
-        <a href="https://www.imdb.com/" target="_blank" rel="noopener">
-          Data courtesy of IMDb
+        <a href="https://www.omdbapi.com/" target="_blank" rel="noopener">
+          IMDb ratings via OMDb
         </a>
       </footer>
     </>

@@ -7,9 +7,10 @@ from pathlib import Path
 
 from src.catalogue.schemas import Card
 from src.catalogue.service import resolve
+from src.config import Settings
 
 
-def evaluate(path: Path, data_dir: Path) -> dict:
+def evaluate(path: Path, config: Settings) -> dict:
     with path.open(encoding="utf-8", newline="") as source:
         rows = list(csv.DictReader(source))
     correct = displayed = recognized = 0
@@ -23,7 +24,7 @@ def evaluate(path: Path, data_dir: Path) -> dict:
             year=int(row["year"]) if row["year"] else None,
             type=row["type"] or None,
         )
-        result = resolve(data_dir, [card], use_mappings=False).results[0]
+        result = resolve(config, [card], use_mappings=False).results[0]
         recognized += bool(expected)
         if result.rating:
             displayed += 1
@@ -48,8 +49,7 @@ def evaluate(path: Path, data_dir: Path) -> dict:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("csv", type=Path)
-    parser.add_argument("--data-dir", type=Path, default=Path("data"))
     args = parser.parse_args()
-    report = evaluate(args.csv, args.data_dir)
+    report = evaluate(args.csv, Settings())
     print(json.dumps(report, ensure_ascii=False, indent=2))
     raise SystemExit(0 if report["accepted"] else 1)

@@ -1,61 +1,97 @@
-import csv
-import gzip
+from pathlib import Path
 
+import httpx
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.engine import make_url
 
-from src.catalogue.importer import import_catalogue
 from src.config import Settings
 from src.database import init_operations
 from src.main import create_app
 
 
 @pytest.fixture
-def source(tmp_path):
-    folder = tmp_path / "source"
-    folder.mkdir()
-    data = {
-        "title.ratings": [
-            ["tconst", "averageRating", "numVotes"],
-            ["tt1", "7.0", "1000"],
-            ["tt2", "8.0", "999"],
-            ["tt3", "8.5", "5000"],
-            ["tt4", "9.0", "10000"],
-            ["tt5", "8.0", "100"],
-            ["tt7", "7.8", "531"],
-        ],
-        "title.basics": [
-            ["tconst", "titleType", "primaryTitle", "originalTitle", "startYear"],
-            ["tt1", "movie", "Same Name", "Same Name", "2020"],
-            ["tt2", "movie", "Same Name", "Same Name", "2021"],
-            ["tt3", "tvSeries", "Same Name", "Same Name", "2020"],
-            ["tt4", "tvEpisode", "Episode", "Episode", "2020"],
-            ["tt5", "movie", "കുമ്പളങ്ങി നൈറ്റ്സ്", "കുമ്പളങ്ങി നൈറ്റ്സ്", r"\N"],
-            ["tt6", "movie", "Unrated", "Unrated", "2022"],
-            ["tt7", "tvSpecial", "Zakir Khan: Papa Yaar", "Zakir Khan: Papa Yaar", "2026"],
-        ],
-        "title.akas": [
-            ["titleId", "title"],
-            ["tt1", "Only Rated Alias"],
-            ["tt6", "Only Rated Alias"],
-            ["tt1", "Alternate Title"],
-            ["tt1", "Alternate Title"],
-            ["tt5", "Kumbalangi Nights"],
-            ["tt7", "Papa Yaar by Zakir Khan"],
-        ],
-    }
-    for name, rows in data.items():
-        with gzip.open(folder / f"{name}.tsv.gz", "wt", encoding="utf-8", newline="") as stream:
-            csv.writer(stream, delimiter="\t", quoting=csv.QUOTE_NONE).writerows(rows)
-    return folder
+def config(tmp_path):
+    config = Settings(
+        DATABASE_URL=f"sqlite:///{tmp_path / 'operations.sqlite3'}",
+        requests_per_minute=1000,
+        OMDB_API_KEY="test-key",
+    )
+    init_operations(config.database_url.get_secret_value())
+    return config
 
 
 @pytest.fixture
-def config(tmp_path, source):
-    config = Settings(data_dir=tmp_path / "data", requests_per_minute=1000)
-    import_catalogue(source, config.data_dir, "2026-10-11")
-    init_operations(config.data_dir)
-    return config
+def database_path(config):
+    return Path(make_url(config.database_url.get_secret_value()).database)
+
+
+@pytest.fixture(autouse=True)
+def omdb(monkeypatch):
+    titles = {
+        "tt1": {
+            "Title": "Same Name",
+            "Year": "2020",
+            "Type": "movie",
+            "imdbRating": "7.0",
+            "imdbVotes": "1,000",
+        },
+        "tt2": {
+            "Title": "Same Name",
+            "Year": "2021",
+            "Type": "movie",
+            "imdbRating": "8.0",
+            "imdbVotes": "999",
+        },
+        "tt3": {
+            "Title": "Same Name",
+            "Year": "2020–",
+            "Type": "series",
+            "imdbRating": "8.5",
+            "imdbVotes": "5,000",
+        },
+        "tt5": {
+            "Title": "Kumbalangi Nights",
+            "Year": "2019",
+            "Type": "movie",
+            "imdbRating": "8.0",
+            "imdbVotes": "100",
+        },
+        "tt6": {
+            "Title": "Unrated",
+            "Year": "2022",
+            "Type": "movie",
+            "imdbRating": "N/A",
+            "imdbVotes": "N/A",
+        },
+    }
+    calls = []
+
+    def get(self, url, *, params):
+        calls.append(params)
+        found = None
+        if params.get("i"):
+            found = params["i"] if params["i"] in titles else None
+        elif params["t"] == "Alternate Title":
+            found = "tt1"
+        else:
+            for imdb_id, title in titles.items():
+                if (
+                    title["Title"] == params["t"]
+                    and (not params.get("y") or title["Year"][:4] == params["y"])
+                    and (not params.get("type") or title["Type"] == params["type"])
+                ):
+                    found = imdb_id
+                    break
+        data = (
+            {"Response": "True", "imdbID": found, **titles[found]}
+            if found
+            else {"Response": "False", "Error": "Movie not found!"}
+        )
+        return httpx.Response(200, json=data, request=httpx.Request("GET", "https://omdb.test/"))
+
+    monkeypatch.setattr(httpx.Client, "get", get)
+    return titles, calls
 
 
 @pytest.fixture

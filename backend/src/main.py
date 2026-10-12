@@ -6,19 +6,17 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
-from sqlmodel import select
 from starlette.concurrency import run_in_threadpool
 
 from src.catalogue import router as catalogue_router
-from src.catalogue.models import Metadata
 from src.config import Settings, settings
-from src.database import catalogue_connection, init_operations
+from src.database import init_operations
 
 
 def create_app(config: Settings = settings) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        await run_in_threadpool(init_operations, config.data_dir)
+        await run_in_threadpool(init_operations, config.database_url.get_secret_value())
 
         yield
 
@@ -70,12 +68,9 @@ def create_app(config: Settings = settings) -> FastAPI:
 
     @app.get("/health", tags=["health"])
     def health():
-        try:
-            with catalogue_connection(config.data_dir) as db:
-                metadata = dict(db.exec(select(Metadata.key, Metadata.value)).all())
-            return {"status": "ok", "dataset_version": metadata["version"]}
-        except (FileNotFoundError, SQLAlchemyError, KeyError):
-            return JSONResponse({"status": "catalogue_unavailable"}, 503)
+        if not config.omdb_api_key.get_secret_value():
+            return JSONResponse({"status": "omdb_key_missing"}, 503)
+        return {"status": "ok", "dataset_version": "omdb"}
 
     app.include_router(catalogue_router.router)
     return app

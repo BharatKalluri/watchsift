@@ -54,7 +54,7 @@ export class Engine {
     const results: Resolution[] = [];
     if (cards.length && this.now() >= state.retryAt) {
       try {
-        const response = await this.transport('/v1/resolve', { cards }, AbortSignal.timeout(5000));
+        const response = await this.transport('/v1/resolve', { cards }, AbortSignal.timeout(30000));
         if (!validResponse(response, cards)) throw new Error('Invalid rating response');
         results.push(...response.results);
         state.status = 'Connected';
