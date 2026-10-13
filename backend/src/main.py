@@ -1,4 +1,6 @@
+import logging
 import time
+import traceback
 from collections import OrderedDict
 from contextlib import asynccontextmanager
 
@@ -11,6 +13,8 @@ from starlette.concurrency import run_in_threadpool
 from src.catalogue import router as catalogue_router
 from src.config import Settings, settings
 from src.database import init_operations
+
+logger = logging.getLogger("uvicorn.error")
 
 
 def create_app(config: Settings = settings) -> FastAPI:
@@ -64,6 +68,15 @@ def create_app(config: Settings = settings) -> FastAPI:
 
     @app.exception_handler(SQLAlchemyError)
     async def database_error(request: Request, exc: SQLAlchemyError):
+        logger.error(
+            "Storage unavailable: path=%s error=%s\n%s",
+            request.url.path,
+            type(exc).__name__,
+            "\n".join(
+                f"  {frame.filename}:{frame.lineno} in {frame.name}"
+                for frame in traceback.extract_tb(exc.__traceback__)
+            ),
+        )
         return JSONResponse({"detail": "Storage unavailable"}, 503, headers={"Retry-After": "30"})
 
     @app.get("/health", tags=["health"])

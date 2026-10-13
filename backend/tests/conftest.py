@@ -5,6 +5,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.engine import make_url
 
+from src.catalogue.ratings_providers import OMDbRatingsProvider
 from src.config import Settings
 from src.database import init_operations
 from src.main import create_app
@@ -14,6 +15,7 @@ from src.main import create_app
 def config(tmp_path):
     config = Settings(
         DATABASE_URL=f"sqlite:///{tmp_path / 'operations.sqlite3'}",
+        environment="local",
         requests_per_minute=1000,
         OMDB_API_KEY="test-key",
         REELDB_API_KEY="",
@@ -29,6 +31,7 @@ def database_path(config):
 
 @pytest.fixture(autouse=True)
 def omdb(monkeypatch):
+    original = httpx.Client.get
     titles = {
         "tt1": {
             "Title": "Same Name",
@@ -68,7 +71,9 @@ def omdb(monkeypatch):
     }
     calls = []
 
-    def get(self, url, *, params):
+    def get(self, url, *, params=None, **kwargs):
+        if url != OMDbRatingsProvider.endpoint:
+            return original(self, url, params=params, **kwargs)
         calls.append(params)
         found = None
         if params.get("i"):

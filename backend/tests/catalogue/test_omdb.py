@@ -1,13 +1,15 @@
 import logging
 import sqlite3
 import time
+from unittest.mock import Mock
 
 import httpx
 import pytest
 
 from src.catalogue.schemas import Card
-from src.catalogue.service import CACHE_TTL, resolve
+from src.catalogue.service import CACHE_TTL
 from src.config import Settings
+from tests import resolve
 
 
 def card(**kwargs):
@@ -25,14 +27,14 @@ def test_omdb_lookup_without_dataset_caches_votes_until_expiry(config, omdb, dat
     assert first.dataset_version == "omdb"
     assert omdb[1][0] == {"apikey": "test-key", "t": "Same Name", "y": "2020", "type": "movie"}
     omdb[0]["tt1"].update(imdbRating="7.9", imdbVotes="2,000")
-    assert resolve(config, [card()]).results[0].rating.votes == 1000
+    assert (resolve(config, [card()])).results[0].rating.votes == 1000
     assert len(omdb[1]) == 1
     assert caplog.messages == [
         "OMDb request: title='Same Name' imdb_id=None year=2020 type='movie'"
     ]
     with sqlite3.connect(database_path) as db:
         db.execute("UPDATE imdb_cache SET fetched_at=?", (int(time.time()) - CACHE_TTL,))
-    assert resolve(config, [card()]).results[0].rating.votes == 2000
+    assert (resolve(config, [card()])).results[0].rating.votes == 2000
     assert omdb[1][-1]["i"] == "tt1"
     assert caplog.messages[-1] == ("OMDb request: title=None imdb_id='tt1' year=None type=None")
     assert len(caplog.messages) == 2
@@ -46,9 +48,10 @@ def test_duplicates_and_order_and_mapping_correction(config, omdb, database_path
         provider_id="B000000001",
         title="Kumbalangi Nights",
     )
-    results = resolve(config, [card(year=2020), other, card(year=2021), card()]).results
+    results = (resolve(config, [card(year=2020), other, card(year=2021), card()])).results
     assert [r.request_id for r in results] == ["0", "other", "0", "0"]
-    assert [r.rating.imdb_id for r in results] == ["tt1", "tt5", "tt2", "tt2"]
+    assert [r.rating.imdb_id for r in results] == ["tt1", "tt5", "tt2", "tt1"]
+    resolve(config, [card(year=2021)])
     omdb[1].clear()
     resolve(config, [card()] * 3)
     assert len(omdb[1]) == 0
@@ -91,8 +94,10 @@ async def test_bad_upstream_responses_are_private_and_retryable(client, monkeypa
     monkeypatch.setattr(
         httpx.Client,
         "get",
-        lambda *a, **kw: httpx.Response(
-            200, json=data, request=httpx.Request("GET", "https://omdb.test/")
+        Mock(
+            return_value=httpx.Response(
+                200, json=data, request=httpx.Request("GET", "https://omdb.test/")
+            )
         ),
     )
     response = await client.post("/v1/resolve", json={"cards": [card().model_dump()]})
@@ -111,7 +116,10 @@ async def test_network_failure_is_retryable(client, monkeypatch, caplog):
     monkeypatch.setattr(httpx.Client, "get", fail)
     response = await client.post("/v1/resolve", json={"cards": [card().model_dump()]})
     assert response.status_code == 503
-    assert caplog.messages == ["OMDb request: title='Same Name' imdb_id=None year=None type=None"]
+    assert "OMDb failed: imdb_id=None reason=ReadTimeout" in caplog.messages
+    assert any("Resolve failed: cards=1 error=ReadTimeout" in m for m in caplog.messages)
+    assert "ratings_providers.py" in caplog.text
+    assert "upstream timeout" not in caplog.text
 
 
 async def test_missing_key_health_and_lookup(client, config):
