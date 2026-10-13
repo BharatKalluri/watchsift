@@ -20,6 +20,10 @@ class RatingsProvider:
         self.client = client
         self.api_key = api_key
 
+    @property
+    def configured(self) -> bool:
+        return bool(self.api_key.get_secret_value())
+
     def fetch(
         self, request: schemas.RatingsProviderRequest
     ) -> schemas.RatingsProviderResult | None:

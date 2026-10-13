@@ -6,8 +6,8 @@ from unittest.mock import Mock
 import httpx
 import pytest
 
+from src.catalogue.constants import CACHE_TTL
 from src.catalogue.schemas import Card
-from src.catalogue.service import CACHE_TTL
 from src.config import Settings
 from tests import resolve
 

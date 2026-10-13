@@ -39,18 +39,16 @@ def reel(config, monkeypatch):
     return data, calls
 
 
-def test_fallback_returns_new_ratings_without_mutating_omdb_row(config, reel):
+def test_fallback_ratings_copy_without_mutating_omdb_row():
     original = IMDbCache(imdb_id="tt6", title="Unrated", year=2022, type="movie", fetched_at=1)
+    source = IMDbCache(
+        imdb_id="tt6", title="Other", type="movie", rating=5.7, votes=4477, fetched_at=2
+    )
     before = original.model_dump()
-    with httpx.Client() as client:
-        rated = service._with_ratings(
-            original,
-            None,
-            ReelDBRatingsProvider(client, config.reeldb_api_key),
-        )
+    rated = service._with_ratings(original, source)
     assert original.model_dump() == before
-    assert rated is not original
     assert (rated.title, rated.year, rated.rating, rated.votes) == ("Unrated", 2022, 5.7, 4477)
+    assert rated.fetched_at == 1
 
 
 async def lookup(client, title="Unrated", **hints):
@@ -81,12 +79,53 @@ async def test_missing_metadata_falls_back_and_is_cached(client, config, omdb, r
         assert (row.title, row.year, row.rating, row.votes) == ("Unrated", 2022, 5.7, 4477)
 
 
-async def test_existing_unrated_cache_gets_fallback(client, config, omdb, reel):
+async def test_unrated_cache_hits_wait_for_expiry_before_fallback(
+    client, config, omdb, reel, monkeypatch
+):
+    clock = [1000000]
+    monkeypatch.setattr(service.time, "time", lambda: clock[0])
     config.reeldb_api_key = SecretStr("")
     assert (await lookup(client)).json()["results"][0]["rating"] is None
     config.reeldb_api_key = SecretStr("reel-test-key")
+    assert (await lookup(client)).json()["results"][0]["rating"] is None
+    assert (len(omdb[1]), len(reel[1])) == (1, 0)
+    clock[0] += service.CACHE_TTL
     assert (await lookup(client)).json()["results"][0]["rating"]["votes"] == 4477
-    assert len(omdb[1]) == len(reel[1]) == 1
+    assert (len(omdb[1]), len(reel[1])) == (2, 1)
+
+
+def prime(title="Unrated"):
+    return {
+        "request_id": "1",
+        "provider": "primevideo",
+        "provider_id": "B000000001",
+        "title": title,
+    }
+
+
+async def test_second_provider_reuses_fallback_ratings_without_reeldb(client, omdb, reel):
+    await lookup(client)
+    response = await client.post("/v1/resolve", json={"cards": [prime()]})
+    assert response.json()["results"][0]["rating"]["votes"] == 4477
+    assert (len(omdb[1]), len(reel[1])) == (2, 1)
+
+
+async def test_batch_calls_reeldb_once_per_imdb_id(client, omdb, reel):
+    cards = [{"request_id": "0", "netflix_id": "123", "title": "Unrated"}, prime()]
+    response = await client.post("/v1/resolve", json={"cards": cards})
+    assert [result["rating"]["votes"] for result in response.json()["results"]] == [4477, 4477]
+    assert (len(omdb[1]), len(reel[1])) == (1, 1)
+
+
+async def test_stale_refresh_keeps_stored_fallback_ratings(client, config, omdb, reel, monkeypatch):
+    clock = [1000000]
+    monkeypatch.setattr(service.time, "time", lambda: clock[0])
+    await lookup(client)
+    clock[0] += service.CACHE_TTL
+    assert (await lookup(client)).json()["results"][0]["rating"]["votes"] == 4477
+    assert (len(omdb[1]), len(reel[1])) == (2, 1)
+    with operations_session(config.database_url.get_secret_value()) as db:
+        assert db.get(IMDbCache, "tt6").fetched_at == clock[0]
 
 
 @pytest.mark.parametrize(

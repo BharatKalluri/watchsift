@@ -8,9 +8,9 @@ from pydantic import SecretStr
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
-from src.catalogue import cache, service
+from src.catalogue import dao, service
 from src.catalogue.models import IMDbCache, ProviderMapping
-from src.catalogue.ratings_providers import OMDbRatingsProvider, ReelDBRatingsProvider
+from src.catalogue.ratings_providers import OMDbRatingsProvider
 from src.catalogue.schemas import Card
 from src.database import operations_session
 from tests import resolve
@@ -20,21 +20,15 @@ def card(**kwargs):
     return Card(request_id="0", provider="netflix", provider_id="123", title="Same Name", **kwargs)
 
 
-def test_resolve_card_returns_response_and_writes_without_persisting(config):
-    with httpx.Client(timeout=2) as client:
-        result, writes = service.resolve_card(
-            card(),
-            service._lookup(card(), None, None, OMDbRatingsProvider(client, config.omdb_api_key)),
-            None,
-            ReelDBRatingsProvider(client, config.reeldb_api_key),
-        )
-    assert result.request_id == "0"
-    assert result.status == "matched"
-    assert result.rating.imdb_id == "tt1"
-    assert [type(record) for record in writes] == [IMDbCache, ProviderMapping]
+def test_batch_asks_omdb_each_distinct_question_once(config, omdb):
+    prime = Card(request_id="1", provider="primevideo", provider_id="B000000001", title="Same Name")
+    again = Card(request_id="2", netflix_id="456", title="Same Name")
+    results = resolve(config, [card(), prime, again]).results
+    assert [result.rating.imdb_id for result in results] == ["tt1"] * 3
+    assert omdb[1] == [{"apikey": "test-key", "t": "Same Name"}]
     with operations_session(config.database_url.get_secret_value()) as db:
-        assert db.get(IMDbCache, "tt1") is None
-        assert db.get(ProviderMapping, ("netflix", "123")) is None
+        assert len(db.exec(select(ProviderMapping)).all()) == 3
+        assert len(db.exec(select(IMDbCache)).all()) == 1
 
 
 def test_resolve_uses_caller_thread_and_leaves_commit_to_caller(config, monkeypatch):
@@ -94,14 +88,14 @@ def test_two_providers_share_one_rating_cache_and_refresh(config, omdb, monkeypa
         assert len(db.exec(select(ProviderMapping)).all()) == 2
         rows = db.exec(select(IMDbCache)).all()
         assert len(rows) == 1
-        assert rows[0].fetched_at == 1000000
+        assert rows[0].fetched_at == 1000010
     omdb[1].clear()
     resolve(config, [prime, card()])
     assert omdb[1] == []
-    clock[0] = 1000000 + service.CACHE_TTL
+    clock[0] = 1000010 + service.CACHE_TTL
     resolve(config, [prime, card()])
-    assert 1 <= len(omdb[1]) <= 2
-    assert all(call == {"apikey": "test-key", "i": "tt1"} for call in omdb[1])
+    assert 1 == len(omdb[1])
+    assert omdb[1] == [{"apikey": "test-key", "i": "tt1"}]
 
 
 async def test_concurrent_cache_misses_are_safe_and_cached(config, omdb):
@@ -136,7 +130,7 @@ def test_late_cache_write_preserves_fresh_ratings(config, age, rating, votes, ex
     row.rating, row.votes = rating, votes
     row.fetched_at += age
     with operations_session(storage) as db:
-        cache.save(db, [row])
+        dao.save(db, [row])
     with operations_session(storage) as db:
         assert db.get(IMDbCache, "tt1").rating == expected
 
@@ -162,11 +156,10 @@ def test_batch_limits_active_provider_requests_to_eight(config, monkeypatch):
                 active -= 1
 
     monkeypatch.setattr(httpx.Client, "get", get)
-    cards = [Card(request_id=str(i), netflix_id=str(i), title="Same Name") for i in range(12)]
+    cards = [Card(request_id=str(i), netflix_id=str(i), title=f"Title {i}") for i in range(12)]
     response = resolve(config, cards)
     assert peak == 8
     assert [r.request_id for r in response.results] == [str(i) for i in range(12)]
-    assert all(r.rating.imdb_id == "tt1" for r in response.results)
 
 
 async def test_independent_lookups_overlap_and_keep_input_order(client, monkeypatch):
